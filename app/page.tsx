@@ -776,17 +776,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
   };
 
   const handleSave = async () => {
-    // Validar que SO2 tenga valores si no se proporcionaron al crear
-    if (editedTest.so2Residuals === undefined || editedTest.so2Residuals === null || editedTest.so2Residuals === 0) {
-      alert('⚠️ Por favor ingresa el valor de Residual SO2 MW antes de guardar.');
-      return;
-    }
+    // Permitir guardar sin validar SO2 residuals para mayor flexibilidad
+    // Los usuarios pueden guardar el progreso aunque no hayan completado estos campos
     
-    if (editedTest.so2Bf === undefined || editedTest.so2Bf === null || editedTest.so2Bf === 0) {
-      alert('⚠️ Por favor ingresa el valor de Residual SO2 BF antes de guardar.');
-      return;
-    }
-
     setIsSaving(true);
     try {
       await saveTestToFirestore(editedTest);
@@ -1115,7 +1107,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
                         handleSampleChange(sample.id, 'rawUnits', undefined);
                       }
                     }}
-                    placeholder="0-20 (Ej: 15.5 o 15,5)"
+                    placeholder="0-20"
                     disabled={editedTest.isCompleted}
                     className="h-11 text-base"
                   />
@@ -1161,7 +1153,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
                         handleSampleChange(sample.id, 'cookedUnits', undefined);
                       }
                     }}
-                    placeholder="0-20 (Ej: 12.3 o 12,3)"
+                    placeholder="0-20"
                     disabled={editedTest.isCompleted}
                     className="h-11 text-base"
                   />
