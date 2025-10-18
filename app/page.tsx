@@ -1170,7 +1170,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     id={`photo-${sample.id}`}
                     className="hidden"
                     onChange={(e) => {
