@@ -11,9 +11,10 @@
 import { ResistanceTest } from './types';
 
 const DB_NAME = 'AquagoldResistenciasDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incrementado para agregar metadata store
 const STORE_NAME = 'resistance_tests';
 const PENDING_SYNC_STORE = 'pending_sync';
+const METADATA_STORE = 'sync_metadata';
 
 // Inicializar IndexedDB
 const initDB = (): Promise<IDBDatabase> => {
@@ -44,6 +45,12 @@ const initDB = (): Promise<IDBDatabase> => {
         const syncStore = db.createObjectStore(PENDING_SYNC_STORE, { keyPath: 'id' });
         syncStore.createIndex('timestamp', 'timestamp', { unique: false });
         console.log('✅ Store de sincronización creado');
+      }
+
+      // Crear store para metadata (timestamps de sync, etc)
+      if (!db.objectStoreNames.contains(METADATA_STORE)) {
+        db.createObjectStore(METADATA_STORE, { keyPath: 'key' });
+        console.log('✅ Store de metadata creado');
       }
     };
   });
@@ -194,7 +201,7 @@ export const getTestLocally = async (id: string): Promise<ResistanceTest | null>
 };
 
 /**
- * Obtener todos los tests locales
+ * Obtener todos los tests locales (filtra metadata y registros reservados)
  */
 export const getAllTestsLocally = async (): Promise<ResistanceTest[]> => {
   try {
@@ -202,14 +209,27 @@ export const getAllTestsLocally = async (): Promise<ResistanceTest[]> => {
     const transaction = db.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
 
-    const tests = await new Promise<ResistanceTest[]>((resolve, reject) => {
+    const allRecords = await new Promise<any[]>((resolve, reject) => {
       const request = store.getAll();
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
 
+    // Filtrar registros metadata y registros reservados (que empiezan con __)
+    const tests = allRecords.filter(record => {
+      // Excluir si el ID empieza con __ (metadata o reservados)
+      if (record.id && record.id.startsWith('__')) {
+        return false;
+      }
+      // Excluir si no tiene estructura de test válida
+      if (!record.lotNumber || !record.date) {
+        return false;
+      }
+      return true;
+    }) as ResistanceTest[];
+
     db.close();
-    console.log(`📂 ${tests.length} tests en almacenamiento local`);
+    console.log(`📂 ${tests.length} tests válidos en almacenamiento local (${allRecords.length - tests.length} registros metadata filtrados)`);
     return tests;
   } catch (error) {
     console.error('❌ Error obteniendo tests locales:', error);
@@ -270,3 +290,182 @@ export const clearAllLocalData = async (): Promise<void> => {
     console.error('❌ Error limpiando datos locales:', error);
   }
 };
+
+// ============================================
+// SINCRONIZACIÓN INCREMENTAL INTELIGENTE
+// ============================================
+
+const MAX_LOCAL_TESTS = 50; // Mantener solo las últimas 50 resistencias localmente
+
+/**
+ * Guardar timestamp de última sincronización en IndexedDB (SOLO local, NO en Firestore)
+ */
+export const saveLastSyncTimestamp = async (timestamp: string): Promise<void> => {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([METADATA_STORE], 'readwrite');
+    const store = transaction.objectStore(METADATA_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put({ key: 'lastSync', timestamp });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+
+    db.close();
+    console.log('⏱️ Última sincronización guardada:', timestamp);
+  } catch (error) {
+    console.error('❌ Error guardando timestamp:', error);
+  }
+};
+
+/**
+ * Obtener timestamp de última sincronización desde IndexedDB (SOLO local)
+ */
+export const getLastSyncTimestamp = async (): Promise<string | null> => {
+  try {
+    const db = await initDB();
+
+    if (!db.objectStoreNames.contains(METADATA_STORE)) {
+      db.close();
+      return null;
+    }
+
+    const transaction = db.transaction([METADATA_STORE], 'readonly');
+    const store = transaction.objectStore(METADATA_STORE);
+
+    const result = await new Promise<string | null>((resolve) => {
+      const request = store.get('lastSync');
+      request.onsuccess = () => {
+        const data = request.result;
+        resolve(data?.timestamp || null);
+      };
+      request.onerror = () => resolve(null);
+    });
+
+    db.close();
+    return result;
+  } catch (error) {
+    console.error('❌ Error obteniendo timestamp:', error);
+    return null;
+  }
+};
+
+/**
+ * Mantener solo las últimas 50 resistencias en IndexedDB
+ * Elimina las más antiguas automáticamente
+ */
+export const cleanOldTestsFromLocal = async (): Promise<number> => {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const index = store.index('date');
+
+    // Obtener todos los tests ordenados por fecha (más recientes primero)
+    const allTests = await new Promise<ResistanceTest[]>((resolve, reject) => {
+      const request = index.openCursor(null, 'prev'); // 'prev' = descendente
+      const tests: ResistanceTest[] = [];
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          const value = cursor.value;
+          // Excluir metadata (como __lastSync__)
+          if (!value.id?.startsWith('__')) {
+            tests.push(value);
+          }
+          cursor.continue();
+        } else {
+          resolve(tests);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+
+    // Si hay más de 50, eliminar los más antiguos
+    if (allTests.length > MAX_LOCAL_TESTS) {
+      const testsToDelete = allTests.slice(MAX_LOCAL_TESTS);
+      
+      for (const test of testsToDelete) {
+        await new Promise<void>((resolve, reject) => {
+          const deleteRequest = store.delete(test.id);
+          deleteRequest.onsuccess = () => resolve();
+          deleteRequest.onerror = () => reject(deleteRequest.error);
+        });
+      }
+
+      db.close();
+      console.log(`🧹 Eliminados ${testsToDelete.length} tests antiguos (manteniendo últimos ${MAX_LOCAL_TESTS})`);
+      return testsToDelete.length;
+    }
+
+    db.close();
+    return 0;
+  } catch (error) {
+    console.error('❌ Error limpiando tests antiguos:', error);
+    return 0;
+  }
+};
+
+/**
+ * Guardar múltiples tests en IndexedDB (batch save)
+ */
+export const saveTestsBatch = async (tests: ResistanceTest[]): Promise<void> => {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+
+    for (const test of tests) {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.put(test);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    db.close();
+    console.log(`💾 ${tests.length} tests guardados localmente en batch`);
+  } catch (error) {
+    console.error('❌ Error en batch save:', error);
+    throw error;
+  }
+};
+
+/**
+ * Limpiar registros metadata antiguos (migración de v1 a v2)
+ * Elimina el registro __lastSync__ que quedó en resistance_tests
+ */
+export const cleanOldMetadataRecords = async (): Promise<void> => {
+  try {
+    const db = await initDB();
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+
+    // Buscar y eliminar registros que empiecen con __
+    const allKeys = await new Promise<string[]>((resolve, reject) => {
+      const request = store.getAllKeys();
+      request.onsuccess = () => resolve(request.result as string[]);
+      request.onerror = () => reject(request.error);
+    });
+
+    const keysToDelete = allKeys.filter(key => key.startsWith('__'));
+    
+    if (keysToDelete.length > 0) {
+      for (const key of keysToDelete) {
+        await new Promise<void>((resolve, reject) => {
+          const deleteRequest = store.delete(key);
+          deleteRequest.onsuccess = () => resolve();
+          deleteRequest.onerror = () => reject(deleteRequest.error);
+        });
+      }
+      console.log(`🧹 Eliminados ${keysToDelete.length} registros metadata antiguos (${keysToDelete.join(', ')})`);
+    }
+
+    db.close();
+  } catch (error) {
+    console.error('❌ Error limpiando metadata antigua:', error);
+  }
+};
+

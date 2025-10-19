@@ -33,3 +33,38 @@ export interface DailyReport {
   totalTests: number;
   completedTests: number;
 }
+
+// ============================================
+// SISTEMA HÍBRIDO - INTERFACES
+// ============================================
+
+/**
+ * Índice ligero para Firebase (solo campos críticos para queries)
+ * Tamaño: ~200 bytes (vs ~5KB del ResistanceTest completo)
+ * 
+ * Propósito: Queries rápidas y baratas en Firebase
+ * Datos completos: Almacenados en OneDrive (gratis)
+ */
+export interface ResistanceTestIndex {
+  id: string;
+  lotNumber: string;
+  date: string;
+  isCompleted: boolean;
+  updatedAt: any; // Firestore Timestamp
+  
+  // Campos adicionales para sistema híbrido
+  oneDrivePath?: string; // Ruta al JSON completo en OneDrive
+  migratedAt?: any; // Timestamp de cuándo se migró
+  legacyChecksum?: string; // Hash para validar integridad
+}
+
+/**
+ * Resultado de operación de guardado dual
+ */
+export interface DualSaveResult {
+  success: boolean;
+  errors: string[];
+  savedToLocal: boolean;
+  savedToLegacy: boolean;
+  savedToHybrid: boolean;
+}

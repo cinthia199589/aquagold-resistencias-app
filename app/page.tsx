@@ -10,8 +10,13 @@ import {
   markTestAsCompleted,
   searchTests,
   deleteTest,
-  getAllTests
+  getAllTests,
+  loadTestsHybridDual,
+  saveTestHybridDual
 } from '../lib/firestoreService';
+import { getAllTestsLocally } from '../lib/localStorageService';
+// import { migrationService } from '../lib/migrationService'; // Ya no necesario - migración completada
+// import { MigrationStatusBanner } from '../components/MigrationStatusBanner'; // Ya no necesario - migración completada
 import { 
   createLotFolder, 
   saveExcelToOneDrive, 
@@ -25,6 +30,7 @@ import { useAutoSave } from '../lib/useAutoSave';
 import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
 import { DeleteConfirmation } from '../components/DeleteConfirmation';
+import { useOnlineStatus, OfflineBanner } from '../lib/offlineDetector';
 
 // Función para obtener la redirect URI correcta
 const getRedirectUri = () => {
@@ -199,7 +205,13 @@ const ResistanceTestList = ({
   onSearch,
   showAll,
   setShowAll,
-  instance
+  instance,
+  accounts,
+  visibleCount,
+  loadMoreTests,
+  showSearchInFirestore,
+  searchInFullHistory,
+  isSearching
 }: { 
   setRoute: (route: string, params?: any) => void; 
   tests: ResistanceTest[]; 
@@ -209,6 +221,12 @@ const ResistanceTestList = ({
   showAll: boolean;
   setShowAll: (show: boolean) => void;
   instance: any;
+  accounts: any[];
+  visibleCount: number;
+  loadMoreTests: () => void;
+  showSearchInFirestore: boolean;
+  searchInFullHistory: () => void;
+  isSearching: boolean;
 }) => {
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; lotNumber: string } | null>(null);
@@ -277,6 +295,23 @@ const ResistanceTestList = ({
             {/* Búsqueda - En su propia sección */}
             <div className="w-full">
               <SearchBar onSearch={onSearch} />
+              
+              {/* ✅ Botón para buscar en histórico completo de Firestore */}
+              {showSearchInFirestore && (
+                <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300 mb-2">
+                    ℹ️ No se encontraron resultados en las últimas 50 resistencias
+                  </p>
+                  <Button 
+                    onClick={searchInFullHistory}
+                    disabled={isSearching}
+                    variant="outline"
+                    className="w-full gap-2 border-2 border-yellow-600 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40"
+                  >
+                    {isSearching ? '🔄 Buscando...' : '🔍 Buscar en Histórico Completo (Firestore)'}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Botones de Control - Desktop: Centrados, Mobile: Column */}
@@ -284,9 +319,13 @@ const ResistanceTestList = ({
               <Button 
                 variant="outline" 
                 className="gap-2 text-xs sm:text-sm w-full sm:w-auto btn-mobile border-2 border-white text-white hover:bg-white hover:text-gray-900" 
-                onClick={() => setShowAll(!showAll)}
+                onClick={() => {
+                  console.log('🔘 Botón clickeado. Estado actual showAll:', showAll);
+                  setShowAll(!showAll);
+                  console.log('🔄 Nuevo estado showAll:', !showAll);
+                }}
               >
-                {showAll ? '📋 En Progreso' : '🗂️ Historial Completo'}
+                {showAll ? '�️ HISTORIAL COMPLETO' : '� EN PROGRESO'}
               </Button>
               <Button 
                 variant="outline" 
@@ -296,6 +335,7 @@ const ResistanceTestList = ({
                 <FileText size={16}/> 
                 <span className="hidden sm:inline">Reporte </span>Diario
               </Button>
+              
               <Button 
                 className="gap-2 text-xs sm:text-sm w-full sm:w-auto h-10 btn-mobile" 
                 onClick={() => setRoute('new-test')}
@@ -318,7 +358,15 @@ const ResistanceTestList = ({
                 <div className="text-center py-8">
                   <p className="text-gray-500">No se encontraron resistencias en progreso.</p>
                 </div>
-              ) : tests.map(test => (
+              ) : (
+                <>
+                  {/* ✅ Mostrar indicador de cantidad */}
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Mostrando {Math.min(visibleCount, tests.length)} de {tests.length} resistencias
+                  </div>
+                  
+                  {/* ✅ Infinite scroll - Solo mostrar tests visibles */}
+                  {tests.slice(0, visibleCount).map(test => (
                 <div 
                   key={test.id} 
                   className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
@@ -360,7 +408,7 @@ const ResistanceTestList = ({
                       
                       {/* Indicadores de muestras por hora */}
                       <div className="samples-indicator">
-                        {test.samples.map((sample) => {
+                        {(test.samples || []).map((sample) => {
                           const isComplete = sample.photoUrl && sample.photoUrl.trim() !== '' && 
                                            sample.rawUnits !== undefined && sample.rawUnits !== null &&
                                            sample.cookedUnits !== undefined && sample.cookedUnits !== null;
@@ -378,6 +426,21 @@ const ResistanceTestList = ({
                   </div>
                 </div>
               ))}
+              
+              {/* ✅ Botón "Cargar más" si hay más tests */}
+              {visibleCount < tests.length && (
+                <div className="flex justify-center mt-6">
+                  <Button 
+                    onClick={loadMoreTests}
+                    variant="outline"
+                    className="gap-2 border-2 border-white text-white hover:bg-white hover:text-gray-900"
+                  >
+                    📥 Cargar más ({tests.length - visibleCount} restantes)
+                  </Button>
+                </div>
+              )}
+            </>
+              )}
             </div>
           )}
         </CardContent>
@@ -420,7 +483,7 @@ const ResistanceTestList = ({
 };
 
 // Crear nueva resistencia
-const NewTestPage = ({ setRoute, onTestCreated }: { setRoute: (route: string) => void; onTestCreated: () => void }) => {
+const NewTestPage = ({ setRoute, onTestCreated, saveTestFn }: { setRoute: (route: string) => void; onTestCreated: () => void; saveTestFn?: (test: ResistanceTest) => Promise<void> }) => {
   const { instance } = useMsal();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -482,9 +545,13 @@ const NewTestPage = ({ setRoute, onTestCreated }: { setRoute: (route: string) =>
       }
       
       // Guardar en Firestore
-      console.log('💾 Guardando en Firestore...');
-      await saveTestToFirestore(newTest);
-      console.log('✅ Guardado en Firestore exitoso');
+      console.log('💾 Guardando con sistema dual...');
+      if (saveTestFn) {
+        await saveTestFn(newTest);
+      } else {
+        await saveTestToFirestore(newTest);
+      }
+      console.log('✅ Guardado exitoso');
       
       alert(`✅ Resistencia ${newTest.lotNumber} creada exitosamente.`);
       onTestCreated();
@@ -562,9 +629,16 @@ const NewTestPage = ({ setRoute, onTestCreated }: { setRoute: (route: string) =>
 };
 
 // Detalle de resistencia
-const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTest; setRoute: (route: string) => void; onTestUpdated: () => void }) => {
+const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: ResistanceTest; setRoute: (route: string) => void; onTestUpdated: () => void; saveTestFn?: (test: ResistanceTest) => Promise<void> }) => {
   const { instance } = useMsal();
-  const [editedTest, setEditedTest] = useState<ResistanceTest>(test);
+  
+  // Asegurar que test siempre tenga samples array
+  const safeTest = {
+    ...test,
+    samples: test.samples || []
+  };
+  
+  const [editedTest, setEditedTest] = useState<ResistanceTest>(safeTest);
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -588,7 +662,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
   const { status: autoSaveStatus, markAsSaved } = useAutoSave({
     data: editedTest,
     onSave: async () => {
-      await saveTestToFirestore(editedTest);
+      if (saveTestFn) {
+        await saveTestFn(editedTest);
+      } else {
+        await saveTestToFirestore(editedTest);
+      }
       onTestUpdated(); // Actualizar lista en dashboard
     },
     delay: 2000, // 2 segundos
@@ -641,7 +719,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
       setEditedTest(updatedTest);
       
       // Guardar inmediatamente después de borrar
-      await saveTestToFirestore(updatedTest);
+      if (saveTestFn) {
+        await saveTestFn(updatedTest);
+      } else {
+        await saveTestToFirestore(updatedTest);
+      }
       
       // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
       markAsSaved(false);
@@ -699,12 +781,16 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
       
       setEditedTest(updatedTest);
       
-      // 🔥 AUTO-GUARDAR en Firestore inmediatamente después de subir foto
+      // 🔥 AUTO-GUARDAR con sistema dual inmediatamente después de subir foto
       try {
-        await saveTestToFirestore(updatedTest);
-        console.log('✅ Foto subida y guardada automáticamente en Firestore');
+        if (saveTestFn) {
+          await saveTestFn(updatedTest);
+        } else {
+          await saveTestToFirestore(updatedTest);
+        }
+        console.log('✅ Foto subida y guardada automáticamente');
       } catch (saveError: any) {
-        console.error('⚠️ Error al auto-guardar en Firestore:', saveError);
+        console.error('⚠️ Error al auto-guardar:', saveError);
         // No mostrar error al usuario para no interrumpir el flujo
       }
       
@@ -746,7 +832,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
     
     setIsSaving(true);
     try {
-      await saveTestToFirestore(editedTest);
+      if (saveTestFn) {
+        await saveTestFn(editedTest);
+      } else {
+        await saveTestToFirestore(editedTest);
+      }
       
       // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
       // El auto-guardado ya muestra notificación verde automáticamente
@@ -794,17 +884,28 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
 
     setIsCompleting(true);
     try {
-      // Marcar como completada en Firestore
-      await markTestAsCompleted(editedTest.id);
+      // Actualizar test con isCompleted = true
+      const completedTest = { 
+        ...editedTest, 
+        isCompleted: true,
+        completedAt: new Date().toISOString()
+      };
+      
+      // Guardar con sistema dual
+      if (saveTestFn) {
+        await saveTestFn(completedTest);
+      } else {
+        await saveTestToFirestore(completedTest);
+      }
       
       // Generar Excel
-      const excelBlob = generateExcelBlob(editedTest);
+      const excelBlob = generateExcelBlob(completedTest);
       
       // Guardar Excel en OneDrive
-      await saveExcelToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, excelBlob);
+      await saveExcelToOneDrive(instance, loginRequest.scopes, completedTest.lotNumber, excelBlob);
       
       // Actualizar estado local
-      setEditedTest(prev => ({ ...prev, isCompleted: true }));
+      setEditedTest(completedTest);
       
       alert('✅ Resistencia completada y reporte guardado en OneDrive');
       onTestUpdated();
@@ -1049,7 +1150,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 w-full">
-          {editedTest.samples.map(sample => (
+          {(editedTest.samples || []).map(sample => (
             <Card key={sample.id} className="w-full">
               <CardHeader className="pb-2 p-4">
                 <CardTitle className="text-base">Hora: {formatTimeSlot(test.startTime, sample.timeSlot)}</CardTitle>
@@ -1359,51 +1460,246 @@ const DashboardPage = () => {
   const [route, setRoute] = useState('dashboard');
   const [routeParams, setRouteParams] = useState<any>(null);
   const [tests, setTests] = useState<ResistanceTest[]>([]);
-  const [allTests, setAllTests] = useState<ResistanceTest[]>([]);
+  const [allTests, setAllTests] = useState<ResistanceTest[]>([]); // Cache de TODOS los tests
   const [isLoading, setIsLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false); // Toggle para mostrar todo o solo en progreso
+  const [showAll, setShowAll] = useState(false);
+  
+  // ✅ NUEVO: Infinite scroll - Mostrar 30 inicialmente
+  const [visibleCount, setVisibleCount] = useState(30);
+  const TESTS_PER_LOAD = 30;
+  
+  // ✅ NUEVO: Búsqueda mejorada con fallback
+  const [lastSearchTerm, setLastSearchTerm] = useState('');
+  const [showSearchInFirestore, setShowSearchInFirestore] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // 🌐 NUEVO: Detector de conexión offline
+  const { isOnline, wasOffline } = useOnlineStatus();
 
-  const loadTests = async () => {
+  // Cargar todos los tests UNA SOLA VEZ con sincronización incremental
+  // 🌐 OPTIMIZADO: Modo offline - Carga cache local primero, sincroniza solo si hay conexión
+  // 🔄 HÍBRIDO: Sistema dual que lee de índice híbrido + Firebase legacy
+  const loadAllTests = async () => {
+    if (!instance) {
+      console.error('No hay sesión MSAL activa');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const testsFromFirestore = showAll ? await getAllTests() : await getInProgressTests();
-      setTests(testsFromFirestore);
-      setAllTests(testsFromFirestore);
+      // 1. Mostrar cache local INMEDIATAMENTE (funciona offline)
+      const cachedTests = await getAllTestsLocally();
+      console.log(`📦 ${cachedTests.length} tests cargados desde cache local`);
+      setAllTests(cachedTests);
+      filterTests(cachedTests, showAll);
+      setIsLoading(false);  // ✅ UI lista de inmediato
+      
+      // 2. 🌐 Sincronizar cambios SOLO si hay conexión
+      if (isOnline) {
+        try {
+          // 🔄 SISTEMA DUAL: Lee de índice híbrido + Firebase legacy
+          console.log('🔄 Cargando con sistema dual híbrido...');
+          const allTestsHybrid = await loadTestsHybridDual(instance, loginRequest.scopes);
+          
+          console.log(`✅ ${allTestsHybrid.length} tests cargados (híbrido + legacy)`);
+          setAllTests(allTestsHybrid);
+          filterTests(allTestsHybrid, showAll);
+          
+        } catch (syncError) {
+          console.log('⚠️ Error en sincronización híbrida, usando cache local:', syncError);
+          // Fallback: Seguir con datos locales
+        }
+      } else {
+        console.log('📴 Sin conexión - Trabajando con datos locales');
+      }
+      
     } catch (error: any) {
-      alert(`❌ Error: ${error.message}`);
-    } finally {
       setIsLoading(false);
+      alert(`❌ Error: ${error.message}`);
     }
   };
 
+  // Filtrar tests en memoria (MUY RÁPIDO)
+  const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
+    if (showCompleted) {
+      setTests(testsArray); // Mostrar todos
+    } else {
+      setTests(testsArray.filter(t => !t.isCompleted)); // Solo en progreso
+    }
+    // ✅ Resetear contador de visibles al filtrar
+    setVisibleCount(TESTS_PER_LOAD);
+  };
+  
+  // 🔄 NUEVO: Función helper para guardado dual (híbrido + legacy)
+  const saveTestDual = async (test: ResistanceTest) => {
+    if (!instance) {
+      console.error('No hay sesión MSAL activa para guardado dual');
+      // Fallback a guardado legacy
+      await saveTestToFirestore(test);
+      return;
+    }
+
+    try {
+      console.log('🔄 Guardando con sistema dual...');
+      const result = await saveTestHybridDual(instance, loginRequest.scopes, test);
+      
+      if (result.success) {
+        console.log('✅ Guardado dual exitoso');
+      } else {
+        console.warn('⚠️ Guardado dual con advertencias:', result.errors);
+      }
+    } catch (error) {
+      console.error('❌ Error en guardado dual, fallback a legacy:', error);
+      // Fallback: Guardar solo en legacy
+      await saveTestToFirestore(test);
+    }
+  };
+  
+  // 🚀 MIGRACIÓN COMPLETADA - Función ya no necesaria (todos los tests migrados)
+  // const handleStartMigration = async () => {
+  //   if (!instance || !accounts || accounts.length === 0) {
+  //     alert('❌ Debes iniciar sesión primero');
+  //     return;
+  //   }
+  //   
+  //   try {
+  //     console.log('🚀 Iniciando migración manual...');
+  //     await migrationService.startManualMigration(instance, loginRequest.scopes);
+  //     console.log('✅ Migración completada');
+  //     await loadAllTests();
+  //     alert('✅ Migración completada exitosamente');
+  //   } catch (error) {
+  //     console.error('❌ Error en migración:', error);
+  //     alert('Error: ' + (error as any).message);
+  //   }
+  // };
+  
+  // ✅ NUEVO: Cargar más tests (infinite scroll)
+  const loadMoreTests = () => {
+    setVisibleCount(prev => Math.min(prev + TESTS_PER_LOAD, tests.length));
+  };
+
+  // ✅ MEJORADO: Búsqueda con fallback a Firestore
   const handleSearch = async (searchTerm: string) => {
     if (!searchTerm.trim()) {
-      setTests(allTests);
+      filterTests(allTests, showAll);
+      setShowSearchInFirestore(false);
+      setLastSearchTerm('');
       return;
     }
     
+    setIsSearching(true);
+    setLastSearchTerm(searchTerm);
+    
     try {
-      const results = await searchTests(searchTerm);
+      // Buscar primero en cache local (funciona offline)
+      const results = await searchTests(searchTerm, false);
       setTests(results);
+      
+      // Si no encuentra nada Y hay conexión, mostrar botón para buscar en Firestore
+      if (results.length === 0) {
+        if (isOnline) {
+          setShowSearchInFirestore(true);
+        } else {
+          // Si está offline, informar que solo buscó en local
+          alert('📴 Sin conexión - Solo se buscó en las últimas 50 resistencias guardadas localmente');
+        }
+      } else {
+        setShowSearchInFirestore(false);
+      }
+      
+      setVisibleCount(TESTS_PER_LOAD); // Resetear contador
     } catch (error: any) {
       alert(`❌ Error en búsqueda: ${error.message}`);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+  
+  // ✅ NUEVO: Buscar en histórico completo de Firestore
+  const searchInFullHistory = async () => {
+    if (!lastSearchTerm) return;
+    
+    // Verificar conexión antes de intentar búsqueda en Firestore
+    if (!isOnline) {
+      alert('📴 Sin conexión - No se puede buscar en el histórico completo. Conecta a internet para acceder a todos los datos.');
+      return;
+    }
+    
+    setIsSearching(true);
+    try {
+      const results = await searchTests(lastSearchTerm, true); // ✅ Buscar en Firestore
+      setTests(results);
+      setShowSearchInFirestore(false);
+      
+      if (results.length === 0) {
+        alert('❌ No se encontraron resistencias con ese criterio en todo el histórico');
+      } else {
+        alert(`✅ Se encontraron ${results.length} resistencias en el histórico completo`);
+      }
+      
+      setVisibleCount(TESTS_PER_LOAD);
+    } catch (error: any) {
+      alert(`❌ Error buscando en histórico: ${error.message}`);
+    } finally {
+      setIsSearching(false);
     }
   };
 
+  // Cargar al inicio UNA SOLA VEZ
   useEffect(() => {
-    loadTests();
-  }, [showAll]); // Recargar cuando cambie showAll
+    loadAllTests();
+  }, []);
 
-  // 🆕 Sincronizar datos pendientes al iniciar la app
+  // 🔄 NUEVO: Iniciar migración en background (no bloquea la app)
+  useEffect(() => {
+    if (!instance || !isOnline) {
+      return; // Esperar a tener sesión y conexión
+    }
+
+    // Verificar que hay una cuenta activa MSAL antes de iniciar migración
+    if (!accounts || accounts.length === 0) {
+      console.log('⏸️ Esperando autenticación MSAL para iniciar migración...');
+      return; // No hay cuenta activa todavía
+    }
+
+    // ✅ MIGRACIÓN COMPLETADA - Ya no es necesario migrar en background
+    // Todos los tests ya están en el sistema híbrido
+    // const startMigration = async () => {
+    //   try {
+    //     console.log('🚀 Iniciando migración en background...');
+    //     await migrationService.startBackgroundMigration(instance, loginRequest.scopes);
+    //     
+    //     console.log('✅ Migración completada - Recargando tests...');
+    //     await loadAllTests();
+    //   } catch (error) {
+    //     console.error('⚠️ Error en migración (datos legacy seguros):', error);
+    //   }
+    // };
+    // const migrationTimer = setTimeout(startMigration, 5000);
+    // return () => clearTimeout(migrationTimer);
+  }, [instance, isOnline, accounts]);
+
+  // Filtrar cuando cambie showAll (INSTANTÁNEO, sin llamada a Firestore)
+  useEffect(() => {
+    filterTests(allTests, showAll);
+  }, [showAll]);
+
+  // 🆕 Sincronizar datos pendientes al iniciar la app (SOLO si hay conexión)
   useEffect(() => {
     const syncOnStartup = async () => {
+      if (!isOnline) {
+        console.log('📴 Sin conexión - Omitiendo sincronización inicial');
+        return;
+      }
+      
       try {
         const { syncPendingData } = await import('../lib/firestoreService');
         const syncedCount = await syncPendingData();
         if (syncedCount > 0) {
           console.log(`🔄 ${syncedCount} tests sincronizados al inicio`);
           // Recargar tests después de sincronizar
-          loadTests();
+          loadAllTests();
         }
       } catch (error) {
         console.error('❌ Error en sincronización inicial:', error);
@@ -1413,6 +1709,28 @@ const DashboardPage = () => {
     syncOnStartup();
   }, []); // Solo al montar el componente
 
+  // 🌐 NUEVO: Sincronizar cuando vuelva la conexión
+  useEffect(() => {
+    if (wasOffline) {
+      console.log('🔄 Conexión restaurada - Sincronizando datos pendientes...');
+      const syncAfterReconnect = async () => {
+        try {
+          const { syncPendingData } = await import('../lib/firestoreService');
+          const syncedCount = await syncPendingData();
+          if (syncedCount > 0) {
+            console.log(`✅ ${syncedCount} tests sincronizados después de reconectar`);
+          }
+          // Recargar todos los datos
+          loadAllTests();
+        } catch (error) {
+          console.error('❌ Error en sincronización post-reconexión:', error);
+        }
+      };
+      
+      syncAfterReconnect();
+    }
+  }, [wasOffline]); // Se ejecuta cuando wasOffline cambia a true
+
   const handleSetRoute = (newRoute: string, params: any = null) => {
     setRoute(newRoute);
     setRouteParams(params);
@@ -1421,18 +1739,24 @@ const DashboardPage = () => {
   const renderContent = () => {
     switch (route) {
       case 'new-test':
-        return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadTests} />;
+        return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadAllTests} saveTestFn={saveTestDual} />;
       case 'test-detail':
         const test = tests.find(t => t.id === routeParams.id);
-        if (test) return <TestDetailPage test={test} setRoute={handleSetRoute} onTestUpdated={loadTests} />;
+        if (test) return <TestDetailPage test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
         return <p>Test no encontrado</p>;
       default:
-        return <ResistanceTestList setRoute={handleSetRoute} tests={tests} isLoading={isLoading} onRefresh={loadTests} onSearch={handleSearch} showAll={showAll} setShowAll={setShowAll} instance={instance} />;
+        return <ResistanceTestList setRoute={handleSetRoute} tests={tests} isLoading={isLoading} onRefresh={loadAllTests} onSearch={handleSearch} showAll={showAll} setShowAll={setShowAll} instance={instance} accounts={accounts} visibleCount={visibleCount} loadMoreTests={loadMoreTests} showSearchInFirestore={showSearchInFirestore} searchInFullHistory={searchInFullHistory} isSearching={isSearching} />;
     }
   };
 
   return (
     <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-950">
+      {/* 🌐 Banner de estado offline/online */}
+      <OfflineBanner isOnline={isOnline} wasOffline={wasOffline} />
+      
+      {/* 🔄 Banner de progreso de migración - YA NO NECESARIO (migración completada) */}
+      {/* <MigrationStatusBanner /> */}
+      
       {/* Header universal - Siempre visible */}
       <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-0 z-50">
         <div className="flex items-center justify-between p-4">

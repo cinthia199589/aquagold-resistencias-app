@@ -1,5 +1,44 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { setLogLevel } from 'firebase/app';
+
+// 🔇 Configurar nivel de log de Firebase para suprimir warnings offline
+if (typeof window !== 'undefined') {
+  // Reducir verbosidad de Firebase (solo errores críticos)
+  setLogLevel('error');
+  
+  // Suprimir warnings adicionales de Firestore offline
+  const originalConsoleWarn = console.warn;
+  const originalConsoleError = console.error;
+  
+  console.warn = function(...args) {
+    const message = args.join(' ');
+    if (
+      message.includes('Could not reach Cloud Firestore backend') ||
+      message.includes('The operation could not be completed') ||
+      message.includes('Connection failed') ||
+      message.includes('device does not have a healthy Internet connection') ||
+      message.includes('Firestore') && message.includes('offline')
+    ) {
+      return; // No mostrar warnings offline
+    }
+    originalConsoleWarn.apply(console, args);
+  };
+  
+  console.error = function(...args) {
+    const message = args.join(' ');
+    if (
+      message.includes('@firebase/firestore') && (
+        message.includes('Could not reach') ||
+        message.includes('Connection failed') ||
+        message.includes('Most recent error')
+      )
+    ) {
+      return; // No mostrar errores de conexión offline
+    }
+    originalConsoleError.apply(console, args);
+  };
+}
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyB3DC17qeItdOfnl1r7kl_WzS61MMTDu6g',
@@ -32,8 +71,21 @@ if (isFirebaseConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
     db = getFirestore(app);
+    
+    // 🌐 Habilitar persistencia local de Firestore para modo offline
+    if (typeof window !== 'undefined' && db) {
+      enableIndexedDbPersistence(db).catch((err: any) => {
+        if (err.code === 'failed-precondition') {
+          console.log('⚠️ Persistencia Firestore: Ya está habilitada en otra pestaña');
+        } else if (err.code === 'unimplemented') {
+          console.log('⚠️ Persistencia Firestore: No soportada en este navegador');
+        }
+      });
+    }
+    
     console.log('✅ Firebase Firestore inicializado correctamente');
     console.log('📊 Proyecto:', firebaseConfig.projectId);
+    console.log('🌐 Modo offline habilitado (persistencia local)');
     console.log('📝 Nota: Las fotos se guardan en OneDrive, no en Firebase Storage');
   } catch (error) {
     console.error('❌ Firebase no pudo inicializarse:', error);
