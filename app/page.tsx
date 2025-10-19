@@ -21,6 +21,10 @@ import { exportToExcel, generateExcelBlob } from '../lib/excelExport';
 import { ResistanceTest, Sample } from '../lib/types';
 import SearchBar from '../components/SearchBar';
 import DailyReportModal from '../components/DailyReportModal';
+import { useAutoSave } from '../lib/useAutoSave';
+import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
+import { SaveNotification } from '../components/SaveNotification';
+import { DeleteConfirmation } from '../components/DeleteConfirmation';
 
 // Función para obtener la redirect URI correcta
 const getRedirectUri = () => {
@@ -569,6 +573,28 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
   const [so2BfText, setSo2BfText] = useState<string>(test.so2Bf?.toString() || '');
 
+  // 🆕 Estado para modal de confirmación de eliminación
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    sampleId: string | null;
+    itemName: string;
+  }>({
+    isOpen: false,
+    sampleId: null,
+    itemName: ''
+  });
+
+  // 🆕 AUTO-GUARDADO con hook profesional (2 segundos)
+  const { status: autoSaveStatus, markAsSaved } = useAutoSave({
+    data: editedTest,
+    onSave: async () => {
+      await saveTestToFirestore(editedTest);
+      onTestUpdated(); // Actualizar lista en dashboard
+    },
+    delay: 2000, // 2 segundos
+    enabled: !test.isCompleted // Solo si NO está completada
+  });
+
   const formatTimeSlot = (baseTime: string, hoursToAdd: number) => {
     try {
       const [hours, minutes] = baseTime.split(':').map(Number);
@@ -586,118 +612,51 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
       samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, [field]: value } : s)
     };
     setEditedTest(updatedTest);
-    
-    // Log para debug del progreso
-    console.log(`🔄 Campo ${field} actualizado con valor:`, value, 'para muestra:', sampleId);
-    
-    // Guardar inmediatamente después de cambio de datos importantes
-    setTimeout(async () => {
-      try {
-        await saveTestToFirestore(updatedTest);
-        console.log('💾 Datos guardados automáticamente');
-        
-        // Mostrar notificación visual
-        const notification = document.createElement('div');
-        notification.className = 'auto-save-notification';
-        notification.textContent = '💾 Guardado automáticamente';
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-          notification.remove();
-        }, 2000);
-      } catch (error: any) {
-        console.error('⚠️ Error guardando datos:', error);
-      }
-    }, 500);
+    // El auto-guardado se encarga del resto (2 segundos)
   };
 
   const handleObservationsChange = (value: string) => {
     const updatedTest = { ...editedTest, observations: value };
     setEditedTest(updatedTest);
+    // El auto-guardado se encarga del resto (2 segundos)
+  };
+
+  // 🆕 Función para borrar muestra CON CONFIRMACIÓN
+  const handleDeleteSample = (sampleId: string) => {
+    const sample = editedTest.samples.find(s => s.id === sampleId);
+    const timeSlot = sample ? `Hora ${sample.timeSlot}` : 'Muestra';
+    setDeleteConfirm({
+      isOpen: true,
+      sampleId: sampleId,
+      itemName: timeSlot
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (deleteConfirm.sampleId) {
+      const updatedTest = {
+        ...editedTest,
+        samples: editedTest.samples.filter(s => s.id !== deleteConfirm.sampleId)
+      };
+      setEditedTest(updatedTest);
+      
+      // Guardar inmediatamente después de borrar
+      await saveTestToFirestore(updatedTest);
+      
+      // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
+      markAsSaved(false);
+      
+      onTestUpdated();
+    }
     
-    // Auto-guardar observaciones después de 1 segundo
-    setTimeout(async () => {
-      try {
-        await saveTestToFirestore(updatedTest);
-        console.log('📝 Observaciones guardadas automáticamente');
-      } catch (error: any) {
-        console.error('⚠️ Error guardando observaciones:', error);
-      }
-    }, 1000);
+    setDeleteConfirm({ isOpen: false, sampleId: null, itemName: '' });
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirm({ isOpen: false, sampleId: null, itemName: '' });
   };
 
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(new Set());
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-  
-  // Auto-guardar con debounce cuando cambian los datos (excepto cuando se está subiendo foto)
-  useEffect(() => {
-    // No auto-guardar si hay fotos subiendo para evitar conflictos
-    if (uploadingPhotos.size > 0) return;
-    
-    // Limpiar timeout anterior
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
-    
-    // Configurar nuevo auto-guardado después de 2 segundos de inactividad
-    const newTimeout = setTimeout(async () => {
-      try {
-        console.log('🔄 Iniciando auto-guardado...');
-        await saveTestToFirestore(editedTest);
-        console.log('✅ Auto-guardado exitoso');
-        
-        // Mostrar notificación visual temporal
-        const notification = document.createElement('div');
-        notification.innerHTML = '💾 Guardado automáticamente';
-        notification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #10b981;
-          color: white;
-          padding: 8px 16px;
-          border-radius: 6px;
-          font-size: 14px;
-          z-index: 9999;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        `;
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 2000);
-        
-      } catch (error: any) {
-        console.error('⚠️ Error en auto-guardado:', error);
-        
-        // Mostrar notificación de error
-        const errorNotification = document.createElement('div');
-        errorNotification.innerHTML = '❌ Error al guardar automáticamente';
-        errorNotification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #ef4444;
-          color: white;
-          padding: 8px 16px;
-          border-radius: 6px;
-          font-size: 14px;
-          z-index: 9999;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        `;
-        document.body.appendChild(errorNotification);
-        setTimeout(() => {
-          document.body.removeChild(errorNotification);
-        }, 3000);
-      }
-    }, 2000);
-    
-    setAutoSaveTimeout(newTimeout);
-    
-    // Cleanup
-    return () => {
-      if (newTimeout) clearTimeout(newTimeout);
-    };
-  }, [editedTest, uploadingPhotos.size]);
   
   const handlePhotoUpload = async (sampleId: string, file: File) => {
     try {
@@ -776,16 +735,21 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
   };
 
   const handleSave = async () => {
-    // Permitir guardar sin validar SO2 residuals para mayor flexibilidad
-    // Los usuarios pueden guardar el progreso aunque no hayan completado estos campos
+    // Guardar INMEDIATAMENTE (sin esperar los 2 segundos del auto-guardado)
+    // Útil cuando el usuario quiere asegurarse que los datos se guardaron antes de salir
     
     setIsSaving(true);
     try {
       await saveTestToFirestore(editedTest);
-      alert('✅ Cambios guardados exitosamente.');
+      
+      // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
+      // El auto-guardado ya muestra notificación verde automáticamente
+      markAsSaved(false);
+      
       onTestUpdated();
     } catch (error: any) {
-      alert(`❌ Error: ${error.message}`);
+      // Solo mostrar alert en caso de ERROR
+      alert(`❌ Error al guardar: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -854,7 +818,26 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
   };
 
   return (
-    <Card>
+    <>
+      {/* 🆕 Indicador de estado de auto-guardado */}
+      <div className="mb-3">
+        <AutoSaveIndicator status={autoSaveStatus} />
+      </div>
+
+      {/* 🆕 Notificación flotante de guardado */}
+      <SaveNotification status={autoSaveStatus} duration={3000} />
+
+      {/* 🆕 Modal de confirmación de borrado */}
+      <DeleteConfirmation
+        isOpen={deleteConfirm.isOpen}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+        title="¿Eliminar muestra?"
+        message="Esta acción eliminará permanentemente la muestra."
+        itemName={deleteConfirm.itemName}
+      />
+
+      <Card>
       <CardHeader className="p-4">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
@@ -1360,6 +1343,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
         )}
       </CardContent>
     </Card>
+    </>
   );
 };
 
@@ -1403,6 +1387,25 @@ const DashboardPage = () => {
   useEffect(() => {
     loadTests();
   }, [showAll]); // Recargar cuando cambie showAll
+
+  // 🆕 Sincronizar datos pendientes al iniciar la app
+  useEffect(() => {
+    const syncOnStartup = async () => {
+      try {
+        const { syncPendingData } = await import('../lib/firestoreService');
+        const syncedCount = await syncPendingData();
+        if (syncedCount > 0) {
+          console.log(`🔄 ${syncedCount} tests sincronizados al inicio`);
+          // Recargar tests después de sincronizar
+          loadTests();
+        }
+      } catch (error) {
+        console.error('❌ Error en sincronización inicial:', error);
+      }
+    };
+
+    syncOnStartup();
+  }, []); // Solo al montar el componente
 
   const handleSetRoute = (newRoute: string, params: any = null) => {
     setRoute(newRoute);

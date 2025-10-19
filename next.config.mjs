@@ -41,28 +41,8 @@ const nextConfig = {
     return config;
   },
   
-  // Headers de seguridad para PWA
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on'
-          },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload'
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
-          },
-        ],
-      },
-    ];
-  },
+  // NOTA: Los headers de seguridad se configuran en vercel.json o netlify.toml
+  // No funcionan con output: 'export' porque requieren un servidor
 };
 
 export default nextConfig;

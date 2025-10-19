@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 
 export interface AutoSaveStatus {
   hasChanges: boolean;
   isSaving: boolean;
   lastSaved: Date | null;
   error: string | null;
+}
+
+export interface AutoSaveReturn {
+  status: AutoSaveStatus;
+  markAsSaved: (showNotification?: boolean) => void; // Permite marcar manualmente como guardado
 }
 
 interface UseAutoSaveOptions {
@@ -40,10 +45,12 @@ export const useAutoSave = ({
   delay = 2000, // 2 segundos por defecto (GUARDADO INMEDIATO)
   enabled = true,
   onStatusChange
-}: UseAutoSaveOptions): AutoSaveStatus => {
+}: UseAutoSaveOptions): AutoSaveReturn => {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousDataRef = useRef<string>('');
   const isSavingRef = useRef(false);
+  const statusRef = useRef<AutoSaveStatus | null>(null);
+  const onSaveRef = useRef<() => Promise<void>>(onSave);
 
   const [status, setStatus] = useState<AutoSaveStatus>({
     hasChanges: false,
@@ -57,7 +64,17 @@ export const useAutoSave = ({
     if (onStatusChange) {
       onStatusChange(status);
     }
+    // mantener ref sincronizada para evitar setState innecesario en el effect principal
+    statusRef.current = status;
   }, [status, onStatusChange]);
+
+  // Mantener referencia estable a onSave para no incluirla en las dependencias
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  // Serializar data una sola vez por render para evitar recalcular JSON.stringify en cada effect
+  const serializedData = useMemo(() => JSON.stringify(data), [data]);
 
   useEffect(() => {
     // Si está deshabilitado o ya está guardando, no hacer nada
@@ -65,23 +82,25 @@ export const useAutoSave = ({
       return;
     }
 
-    // Convertir datos a string para comparar
-    const currentData = JSON.stringify(data);
-
     // Si es la primera vez, solo guardar referencia
     if (!previousDataRef.current) {
-      previousDataRef.current = currentData;
+      previousDataRef.current = serializedData;
       return;
     }
 
     // Si NO hay cambios, no hacer nada
-    if (currentData === previousDataRef.current) {
-      setStatus(prev => ({ ...prev, hasChanges: false }));
+    if (serializedData === previousDataRef.current) {
+      // Evitar llamar setState si el estado ya indica que no hay cambios
+      if (!statusRef.current || statusRef.current.hasChanges) {
+        setStatus(prev => ({ ...prev, hasChanges: false }));
+      }
       return;
     }
 
-    // HAY CAMBIOS - marcar como pendiente
-    setStatus(prev => ({ ...prev, hasChanges: true, error: null }));
+    // HAY CAMBIOS - marcar como pendiente (solo si no está ya marcado)
+    if (!statusRef.current || !statusRef.current.hasChanges) {
+      setStatus(prev => ({ ...prev, hasChanges: true, error: null }));
+    }
 
     // Limpiar timeout anterior
     if (timeoutRef.current) {
@@ -96,10 +115,11 @@ export const useAutoSave = ({
         isSavingRef.current = true;
         setStatus(prev => ({ ...prev, isSaving: true, error: null }));
 
-        await onSave();
+        // Usar la referencia estable a onSave
+        await onSaveRef.current();
 
         // Actualizar referencia después de guardar exitosamente
-        previousDataRef.current = currentData;
+        previousDataRef.current = serializedData;
         
         setStatus({
           hasChanges: false,
@@ -126,7 +146,28 @@ export const useAutoSave = ({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [data, onSave, delay, enabled]);
+  }, [serializedData, delay, enabled]);
 
-  return status;
+  // Función para marcar manualmente como guardado (útil cuando se guarda con botón manual)
+  const markAsSaved = (showNotification: boolean = false) => {
+    previousDataRef.current = serializedData;
+    
+    // Limpiar timeout pendiente
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
+    // Actualizar estado
+    setStatus(prev => ({
+      ...prev,
+      hasChanges: false,
+      isSaving: false,
+      error: null,
+      // Solo actualizar lastSaved si se quiere mostrar notificación
+      lastSaved: showNotification ? new Date() : prev.lastSaved
+    }));
+  };
+
+  return { status, markAsSaved };
 };

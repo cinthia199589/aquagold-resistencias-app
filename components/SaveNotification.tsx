@@ -16,20 +16,44 @@ export const SaveNotification: React.FC<SaveNotificationProps> = ({
 }) => {
   const [show, setShow] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Detectar cuando hay un nuevo guardado exitoso
   useEffect(() => {
-    if (status.lastSaved && status.lastSaved !== lastSavedTime) {
-      setShow(true);
-      setLastSavedTime(status.lastSaved);
+    if (!status.lastSaved) return;
 
-      // Ocultar después de la duración especificada
-      const timer = setTimeout(() => {
-        setShow(false);
-      }, duration);
+    const currentTimestamp = status.lastSaved.getTime();
+    const lastTimestamp = lastSavedTime ? lastSavedTime.getTime() : 0;
 
-      return () => clearTimeout(timer);
+    // Si es el mismo timestamp, no hacer nada (evita duplicados)
+    if (currentTimestamp === lastTimestamp) {
+      return;
     }
+
+    // Si hay notificación reciente (< 1s), ignorar
+    if (lastTimestamp && currentTimestamp - lastTimestamp < 1000) {
+      console.log('⚠️ Notificación duplicada ignorada (< 1s)');
+      return;
+    }
+
+    setShow(true);
+    setLastSavedTime(status.lastSaved);
+
+    // Limpiar timer anterior si existe
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+
+    // Ocultar después de la duración especificada
+    timerRef.current = setTimeout(() => {
+      setShow(false);
+    }, duration);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, [status.lastSaved, lastSavedTime, duration]);
 
   if (!show) return null;
