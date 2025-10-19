@@ -169,17 +169,30 @@ export const uploadPhotoToOneDrive = async (
     const fileName = `foto_${sampleId}.jpg`;
     const uploadEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}:/content`;
     
-    // Subir la foto
+    // INTENTAR ELIMINAR LA FOTO ANTERIOR si existe (para forzar reemplazo)
+    try {
+      const deleteEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+      await callApi(deleteEndpoint, "DELETE");
+      console.log(`🗑️ Foto anterior eliminada: ${fileName}`);
+    } catch (deleteError) {
+      // Si no existe, continuar normalmente (404 es esperado en primera subida)
+      console.log(`ℹ️ No había foto anterior o no se pudo eliminar (normal en primera subida)`);
+    }
+    
+    // Subir la nueva foto
     const uploadResponse = await callApi(uploadEndpoint, "PUT", photoBlob, "image/jpeg");
     
-    // Obtener la URL de visualización de OneDrive
+    // Obtener la URL de visualización de OneDrive con cache-busting
     const fileInfoEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
     const fileInfo = await callApi(fileInfoEndpoint, "GET");
     
-    const photoUrl = fileInfo.webUrl || `${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+    // Agregar timestamp para evitar cache del navegador
+    const timestamp = Date.now();
+    const baseUrl = fileInfo.webUrl || `${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+    const photoUrl = `${baseUrl}?t=${timestamp}`;
     
     console.log(`✅ Foto subida a OneDrive: ${fileName}`);
-    console.log(`📎 URL: ${photoUrl}`);
+    console.log(`📎 URL con cache-busting: ${photoUrl}`);
     
     return photoUrl;
   } catch (error: any) {

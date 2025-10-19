@@ -675,6 +675,12 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
       // Marcar como subiendo
       setUploadingPhotos(prev => new Set([...prev, sampleId]));
       
+      // Limpiar URL anterior si existe (para evitar cache del navegador)
+      const previousSample = editedTest.samples.find(s => s.id === sampleId);
+      if (previousSample?.photoUrl) {
+        console.log('🔄 Reemplazando foto anterior...');
+      }
+      
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
@@ -682,7 +688,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
         samples: prev.samples.map(s => s.id === sampleId ? { ...s, photoUrl: tempUrl, isUploading: true } : s)
       }));
       
-      // Subir SOLO a OneDrive (no a Firebase Storage)
+      // Subir SOLO a OneDrive (esto eliminará la anterior y subirá la nueva)
       const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file);
       
       // Actualizar con URL real y limpiar estado de carga
@@ -705,8 +711,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated }: { test: ResistanceTes
       // Limpiar URL temporal
       URL.revokeObjectURL(tempUrl);
       
-      // Mostrar notificación exitosa más sutil
-      console.log('✅ Foto subida exitosamente');
+      // Mostrar notificación exitosa
+      console.log('✅ Foto subida exitosamente (anterior reemplazada si existía)');
     } catch (error: any) {
       console.error(`❌ Error al subir foto: ${error.message}`);
       
