@@ -13,22 +13,35 @@ import React, { useEffect, useState } from 'react';
 export const useOnlineStatus = () => {
   const [isOnline, setIsOnline] = useState(true);
   const [wasOffline, setWasOffline] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   useEffect(() => {
-    // Verificar estado inicial
-    setIsOnline(navigator.onLine);
+    // Verificar estado inicial SIN mostrar banner
+    const initialOnlineState = navigator.onLine;
+    setIsOnline(initialOnlineState);
+    
+    // Marcar como inicializado después de 1 segundo
+    setTimeout(() => setHasInitialized(true), 1000);
 
     const handleOnline = () => {
-      console.log('🌐 Conexión restaurada');
-      setIsOnline(true);
-      setWasOffline(true);
-      
-      // Reset wasOffline después de 3 segundos
-      setTimeout(() => setWasOffline(false), 3000);
+      // Solo mostrar "reconectado" si ya estaba inicializado
+      if (hasInitialized) {
+        console.log('🌐 Conexión restaurada');
+        setIsOnline(true);
+        setWasOffline(true);
+        
+        // Reset wasOffline después de 3 segundos
+        setTimeout(() => setWasOffline(false), 3000);
+      } else {
+        setIsOnline(true);
+      }
     };
 
     const handleOffline = () => {
-      console.log('📴 Sin conexión - Modo offline activado');
+      // Solo mostrar "sin conexión" si ya estaba inicializado
+      if (hasInitialized) {
+        console.log('📴 Sin conexión - Modo offline activado');
+      }
       setIsOnline(false);
     };
 
@@ -40,7 +53,7 @@ export const useOnlineStatus = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [hasInitialized]);
 
   return { isOnline, wasOffline };
 };

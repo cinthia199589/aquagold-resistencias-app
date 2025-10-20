@@ -3,21 +3,25 @@ import type { Metadata, Viewport } from 'next';
 
 // PWA Ready - Vercel Production Build
 export const metadata: Metadata = {
-  title: 'Aquagold Resistencias',
+  title: 'Resistencias',
   description: 'Sistema de gestión de pruebas de resistencia de camarones',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
-    title: 'Aquagold',
+    statusBarStyle: 'black-translucent',
+    title: 'Resistencias',
   },
   icons: {
     icon: [
-      { url: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
-      { url: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' }
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' }
     ],
-    apple: '/icon-192.svg',
-    shortcut: '/icon.svg'
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
+    ],
+    shortcut: '/favicon-32x32.png'
   },
 };
 

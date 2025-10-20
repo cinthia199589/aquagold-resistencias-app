@@ -142,10 +142,10 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onClose }) 
           )}
         </div>
 
-        <div className="flex justify-end gap-4 p-6 border-t dark:border-gray-800">
+        <div className="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-3 p-6 border-t dark:border-gray-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="w-full sm:w-auto px-6 py-2 border-2 border-gray-300 dark:border-gray-700 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 font-medium"
           >
             Cerrar
           </button>
@@ -153,7 +153,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onClose }) 
             <>
               <button
                 onClick={handleDownload}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
               >
                 <Download size={18} />
                 Descargar Excel
@@ -161,7 +161,7 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onClose }) 
               <button
                 onClick={handleSaveToOneDrive}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 font-medium"
               >
                 <Download size={18} />
                 {isLoading ? 'Guardando...' : 'Guardar en OneDrive'}

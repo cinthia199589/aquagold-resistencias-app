@@ -531,11 +531,17 @@ a:hover {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px;
 }
 
 .main-content {
   flex: 1;
   padding: 12px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 /* ========== CARDS & PANELS ========== */
@@ -544,9 +550,11 @@ a:hover {
   border: 2px solid #64748b;
   border-radius: 14px;
   padding: 16px;
-  margin-bottom: 8px;
+  margin: 8px auto;
   box-shadow: 0 8px 16px rgba(100, 116, 139, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
+  max-width: 1400px;
+  width: 100%;
 }
 
 .card:hover {
@@ -562,11 +570,14 @@ a:hover {
   gap: 10px;
   padding-bottom: 10px;
   border-bottom: none;
+  align-items: center;
+  text-align: center;
 }
 
 .card-description {
   font-size: 0.875rem;
   color: var(--text-secondary);
+  text-align: center;
 }
 
 .card-title {
@@ -574,11 +585,12 @@ a:hover {
   font-size: 1.25rem;
   margin-bottom: 12px;
   color: var(--text-primary);
+  text-align: center;
 }
 
-.card-header {
-  padding-bottom: 0;
-  border-bottom: none;
+.dashboard-title {
+  text-align: center;
+  width: 100%;
 }
 
 /* Card Mobile - Dashboard */
@@ -1053,57 +1065,92 @@ input {
     min-height: 44px;
   }
 
-  /* Dashboard buttons - Desktop layout */
+  /* Dashboard buttons - Desktop layout centrado */
   .dashboard-buttons {
     display: flex;
     flex-direction: row;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  
+  /* Botones de navegación Dashboard y Nueva Resistencia - Centrados */
+  .flex.justify-center {
+    justify-content: center;
+  }
+  
+  .flex.justify-center > div {
+    max-width: 600px;
+  }
+  
+  /* Header sticky - centrar contenido en desktop */
+  .sticky.top-0 > div {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  
+  /* Centrar contenido principal en desktop */
+  .min-h-screen.w-full > div > div {
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
   .dashboard-header {
     flex-direction: column;
     gap: 10px;
-    align-items: stretch;
+    align-items: center;
+    text-align: center;
   }
 
   /* Mejorado: Sección de título y descripción */
   .dashboard-header > div:first-child {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 8px;
     margin-bottom: 0px;
+    width: 100%;
+    text-align: center;
   }
 
   .dashboard-header .dashboard-title {
     font-size: 1.25rem;
     font-weight: 700;
     margin: 0;
+    text-align: center;
   }
 
-  /* Búsqueda - Desktop optimizada */
+  /* Búsqueda - Desktop optimizada y centrada */
   .dashboard-header input[type="text"] {
-    max-width: 350px;
+    max-width: 500px;
     width: 100%;
+    margin: 0 auto;
   }
 
   .search-container {
-    max-width: 400px;
+    max-width: 500px;
+    margin: 0 auto;
+    width: 100%;
   }
 
-  /* Grid para las tarjetas */
+  /* Grid para las tarjetas - centrado */
   .tests-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
     gap: 8px;
+    justify-items: center;
+    margin: 0 auto;
+    max-width: 1400px;
   }
 
   .card {
     padding: 12px;
     border-radius: 12px;
+    width: 100%;
   }
 
   /* Mejorar CardHeader en desktop */
@@ -1217,6 +1264,8 @@ input {
   text-align: center;
   padding: 40px 20px;
   color: var(--gray-600);
+  margin: 0 auto;
+  max-width: 600px;
 }
 
 .empty-state-icon {
@@ -1229,12 +1278,14 @@ input {
   font-weight: 700;
   color: var(--gray-800);
   margin-bottom: 8px;
+  text-align: center;
 }
 
 .empty-state-description {
   font-size: 0.95rem;
   color: var(--gray-600);
   margin-bottom: 24px;
+  text-align: center;
 }
 
 /* ========== MODERN CARD STYLES ========== */

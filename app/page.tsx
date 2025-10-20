@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { MsalProvider, useMsal, MsalAuthenticationTemplate } from '@azure/msal-react';
 import { PublicClientApplication, InteractionType } from '@azure/msal-browser';
 import { Home, PlusCircle, LogOut, User, LogIn, ChevronLeft, Camera, Save, Download, FileText, CheckCircle, Trash2 } from 'lucide-react';
@@ -15,8 +16,6 @@ import {
   saveTestHybridDual
 } from '../lib/firestoreService';
 import { getAllTestsLocally } from '../lib/localStorageService';
-// import { migrationService } from '../lib/migrationService'; // Ya no necesario - migración completada
-// import { MigrationStatusBanner } from '../components/MigrationStatusBanner'; // Ya no necesario - migración completada
 import { 
   createLotFolder, 
   saveExcelToOneDrive, 
@@ -25,12 +24,24 @@ import {
 import { exportToExcel, generateExcelBlob } from '../lib/excelExport';
 import { ResistanceTest, Sample } from '../lib/types';
 import SearchBar from '../components/SearchBar';
-import DailyReportModal from '../components/DailyReportModal';
 import { useAutoSave } from '../lib/useAutoSave';
 import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
-import { DeleteConfirmation } from '../components/DeleteConfirmation';
 import { useOnlineStatus, OfflineBanner } from '../lib/offlineDetector';
+
+// ⚡ LAZY LOADING - Componentes cargados bajo demanda
+const DailyReportModal = dynamic(() => import('../components/DailyReportModal'), {
+  loading: () => <div className="text-center p-4">Cargando reporte...</div>,
+  ssr: false
+});
+
+const DeleteConfirmation = dynamic(
+  () => import('../components/DeleteConfirmation').then(mod => ({ default: mod.DeleteConfirmation })),
+  {
+    loading: () => <div className="text-center p-4">Cargando...</div>,
+    ssr: false
+  }
+);
 
 // Función para obtener la redirect URI correcta
 const getRedirectUri = () => {
@@ -279,12 +290,12 @@ const ResistanceTestList = ({
 
   return (
     <>
-      <Card className="w-full max-w-full">
+      <Card className="w-full max-w-7xl mx-auto">
         <CardHeader className="p-3 sm:p-6">
           <div className="flex flex-col gap-3 dashboard-header">
-            {/* Título y Descripción - Desktop / Mobile */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-              <div className="text-center sm:text-left w-full sm:w-auto">
+            {/* Título y Descripción - Centrado */}
+            <div className="flex flex-col gap-3 items-center text-center w-full">
+              <div className="w-full">
                 <CardTitle className="text-lg sm:text-xl dashboard-title">{showAll ? 'Historial Completo' : 'Resistencias en Progreso'}</CardTitle>
                 <CardDescription className="text-xs sm:text-sm mt-1">
                   {showAll ? 'Todas las resistencias guardadas' : 'Resistencias activas almacenadas en Firestore'}
@@ -292,8 +303,8 @@ const ResistanceTestList = ({
               </div>
             </div>
 
-            {/* Búsqueda - En su propia sección */}
-            <div className="w-full">
+            {/* Búsqueda - Centrada */}
+            <div className="w-full max-w-2xl mx-auto">
               <SearchBar onSearch={onSearch} />
               
               {/* ✅ Botón para buscar en histórico completo de Firestore */}
@@ -314,8 +325,8 @@ const ResistanceTestList = ({
               )}
             </div>
 
-            {/* Botones de Control - Desktop: Centrados, Mobile: Column */}
-            <div className="flex flex-col gap-2 w-full sm:flex-row sm:gap-3 sm:justify-center dashboard-buttons">
+            {/* Botones de Control - Centrados */}
+            <div className="flex flex-col gap-2 w-full sm:flex-row sm:gap-3 sm:justify-center sm:items-center dashboard-buttons max-w-4xl mx-auto">
               <Button 
                 variant="outline" 
                 className="gap-2 text-xs sm:text-sm w-full sm:w-auto btn-mobile border-2 border-white text-white hover:bg-white hover:text-gray-900" 
@@ -393,7 +404,6 @@ const ResistanceTestList = ({
                     <div className="text-xs text-gray-700 dark:text-gray-300 mt-1">
                       <div className="flex flex-col sm:flex-row sm:gap-2">
                         <span>Proveedor: <strong>{test.provider}</strong></span>
-                        <span className="hidden sm:inline">|</span>
                         <span>Piscina: <strong>{test.pool}</strong></span>
                       </div>
                     </div>
@@ -1757,57 +1767,62 @@ const DashboardPage = () => {
       {/* 🔄 Banner de progreso de migración - YA NO NECESARIO (migración completada) */}
       {/* <MigrationStatusBanner /> */}
       
-      {/* Header universal - Siempre visible */}
+      {/* Header universal - Siempre visible y centrado */}
       <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-0 z-50">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">A</div>
-            <Button 
-              onClick={() => instance.logoutRedirect()} 
-              variant="outline"
-              className="text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 hover:border-red-300"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Cerrar Sesión
-            </Button>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <User className="h-4 w-4 text-gray-900 dark:text-gray-100" />
-            <span className="text-gray-900 dark:text-gray-100">{accounts[0]?.name?.split(' ')[0] || "Usuario"}</span>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between p-4">
+            {/* Eliminado logo, imagen y texto Aquagold del header por requerimiento */}
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={() => instance.logoutRedirect()} 
+                variant="outline"
+                className="text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 hover:border-red-300"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Cerrar Sesión</span>
+                <span className="sm:hidden">Salir</span>
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-gray-900 dark:text-gray-100" />
+              <span className="text-gray-900 dark:text-gray-100">{accounts[0]?.name?.split(' ')[0] || "Usuario"}</span>
+            </div>
           </div>
         </div>
         
-        {/* Navegación universal - Forzar rebuild */}
-        <div className="flex border-t dark:border-gray-700">
-          <button 
-            onClick={() => handleSetRoute('dashboard')} 
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
-              route === 'dashboard' 
-                ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            <Home className="h-4 w-4" />
-            Dashboard
-          </button>
-          <button 
-            onClick={() => handleSetRoute('new-test')} 
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
-              route === 'new-test' 
-                ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            <PlusCircle className="h-4 w-4" />
-            Nueva Resistencia
-          </button>
+        {/* Navegación universal - Centrada */}
+        <div className="border-t dark:border-gray-700">
+          <div className="flex max-w-md mx-auto">
+            <button 
+              onClick={() => handleSetRoute('dashboard')} 
+              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+                route === 'dashboard' 
+                  ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              Dashboard
+            </button>
+            <button 
+              onClick={() => handleSetRoute('new-test')} 
+              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+                route === 'new-test' 
+                  ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              <PlusCircle className="h-4 w-4" />
+              Nueva Resistencia
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main content - Full width siempre */}
-      <div className="flex flex-col w-full min-w-0">
-        {/* Main content con padding responsive */}
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 xl:p-8 w-full min-w-0 max-w-full overflow-x-hidden">
+      {/* Main content - Centrado en desktop */}
+      <div className="flex flex-col w-full min-w-0 items-center">
+        {/* Main content con padding responsive y centrado */}
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 xl:p-8 w-full min-w-0 max-w-7xl overflow-x-hidden">
           {renderContent()}
         </main>
       </div>
