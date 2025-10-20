@@ -104,9 +104,11 @@ npm install --legacy-peer-deps
 
 ### 3. Configurar Azure AD (MSAL)
 
-Ya tienes las credenciales configuradas:
-- Client ID: `bf20eec1-debc-4c81-a275-9de5b6f229aa`
-- Tenant ID: `120c6648-f19f-450e-931f-51a5ff6f2b10`
+1. Ve a [Azure Portal](https://portal.azure.com/)
+2. Azure Active Directory → App registrations → Tu aplicación
+3. Copia el **Application (client) ID**
+4. Copia el **Directory (tenant) ID**
+5. Configura las URIs de redirección según el entorno
 
 ### 4. Configurar variables de entorno
 
@@ -114,18 +116,22 @@ Crea un archivo `.env.local` en la raíz del proyecto:
 
 ```env
 # Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=tu-api-key-aqui
+NEXT_PUBLIC_FIREBASE_API_KEY=tu-firebase-api-key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=tu-proyecto.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=tu-proyecto-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=tu-proyecto.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
-NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abcdef
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=tu-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=tu-app-id
 
 # Azure AD (MSAL) Configuration
-NEXT_PUBLIC_MSAL_CLIENT_ID=bf20eec1-debc-4c81-a275-9de5b6f229aa
-NEXT_PUBLIC_MSAL_TENANT_ID=120c6648-f19f-450e-931f-51a5ff6f2b10
-NEXT_PUBLIC_MSAL_REDIRECT_URI=http://localhost:3000
+NEXT_PUBLIC_MSAL_CLIENT_ID=tu-azure-client-id
+NEXT_PUBLIC_MSAL_TENANT_ID=tu-azure-tenant-id
+NEXT_PUBLIC_MSAL_REDIRECT_URI=http://localhost:8080
 ```
+
+⚠️ **IMPORTANTE**: Nunca subas el archivo `.env.local` a GitHub. Ya está en `.gitignore`.
+
+📖 **Ver más**: Consulta `SECURITY.md` para guía completa de seguridad.
 
 ### 5. Configurar reglas de Firestore
 
