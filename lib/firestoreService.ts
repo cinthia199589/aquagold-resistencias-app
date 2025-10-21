@@ -56,10 +56,20 @@ const cleanDataForFirestore = (data: any): any => {
  * Guarda o actualiza una prueba en Firestore (con respaldo local automático)
  */
 export const saveTestToFirestore = async (test: ResistanceTest): Promise<void> => {
+  // ✅ VALIDACIÓN CRÍTICA: Asegurar que testType no sea undefined
+  if (!test.testType || (test.testType !== 'MATERIA_PRIMA' && test.testType !== 'PRODUCTO_TERMINADO')) {
+    console.error('❌ CRÍTICO: testType inválido o faltante en test:', test);
+    console.error('    ID:', test.id);
+    console.error('    testType:', test.testType);
+    // Intentar recuperar del contexto o asignar valor por defecto
+    test.testType = 'MATERIA_PRIMA';
+    console.warn('⚠️ testType asignado por defecto: MATERIA_PRIMA');
+  }
+  
   // SIEMPRE guardar localmente primero (nunca se pierde)
   try {
     await saveTestLocally(test);
-    console.log('💾 Guardado local exitoso:', test.lotNumber);
+    console.log('💾 Guardado local exitoso:', test.lotNumber, '(testType:', test.testType, ')');
   } catch (localError) {
     console.error('❌ Error en guardado local:', localError);
     // Continuar intentando Firestore aunque falle local
@@ -73,7 +83,7 @@ export const saveTestToFirestore = async (test: ResistanceTest): Promise<void> =
   }
   
   try {
-    console.log('☁️ Sincronizando con Firestore:', test.lotNumber);
+    console.log('☁️ Sincronizando con Firestore:', test.lotNumber, '(testType:', test.testType, ')');
     const testRef = doc(db, TESTS_COLLECTION, test.id);
     
     // Limpiar datos antes de guardar
@@ -83,7 +93,7 @@ export const saveTestToFirestore = async (test: ResistanceTest): Promise<void> =
     });
     
     await setDoc(testRef, cleanedTest);
-    console.log(`✅ Prueba ${test.lotNumber} sincronizada con Firestore`);
+    console.log(`✅ Prueba ${test.lotNumber} sincronizada con Firestore (testType: ${test.testType})`);
     
     // Remover de cola de sincronización si estaba pendiente
     await removePendingSync(test.id);

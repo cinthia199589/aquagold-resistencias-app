@@ -1532,23 +1532,44 @@ const DashboardPage = () => {
 
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
+    console.log(`📊 Filtrando ${testsArray.length} tests para workMode: ${workMode}`);
+    
     let filtered = testsArray;
     
     // 1️⃣ Filtrar por tipo de resistencia (workMode)
+    const beforeTypeFilter = filtered.length;
     filtered = filtered.filter(t => t.testType === workMode);
+    console.log(`  📌 Después de filtro por tipo: ${filtered.length}/${beforeTypeFilter} (workMode: ${workMode})`);
+    
+    // Mostrar tipos en allTests para depuración
+    const types = testsArray.map(t => t.testType).filter((v, i, a) => a.indexOf(v) === i);
+    console.log(`  🔍 Tipos disponibles:`, types);
     
     // 2️⃣ Filtrar por estado (completadas o en progreso)
     if (showCompleted) {
       // Mostrar todas (completadas + en progreso) del tipo actual
     } else {
       // Solo mostrar en progreso del tipo actual
+      const beforeCompleteFilter = filtered.length;
       filtered = filtered.filter(t => !t.isCompleted);
+      console.log(`  ✅ Después de filtro completadas: ${filtered.length}/${beforeCompleteFilter}`);
     }
     
     setTests(filtered);
     // ✅ Resetear contador de visibles al filtrar
     setVisibleCount(TESTS_PER_LOAD);
+    
+    console.log(`✅ Resultado final: ${filtered.length} tests visibles`);
   };
+  
+  // 🔥 CRÍTICO FIX: Ejecutar filterTests cuando workMode cambia
+  // Esto previene que los tests "desaparezcan" cuando el usuario cambia entre tipos
+  useEffect(() => {
+    if (allTests.length > 0 && workModeSaved) {
+      console.log(`🔄 Re-filtrando tests porque workMode cambió a: ${workMode}`);
+      filterTests(allTests, showAll);
+    }
+  }, [workMode]); // ← Se ejecuta cada vez que workMode cambia
   
   // 🔄 NUEVO: Función helper para guardado dual (híbrido + legacy)
   const saveTestDual = async (test: ResistanceTest) => {
