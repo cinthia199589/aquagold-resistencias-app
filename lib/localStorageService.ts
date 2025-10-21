@@ -115,6 +115,13 @@ export const getPendingSyncTests = async (): Promise<ResistanceTest[]> => {
   try {
     const db = await initDB();
 
+    // Verificar que los stores existen
+    if (!db.objectStoreNames.contains(PENDING_SYNC_STORE) || !db.objectStoreNames.contains(STORE_NAME)) {
+      console.warn('⚠️ Object stores no existen, base de datos corrupta. Retornando array vacío.');
+      db.close();
+      return [];
+    }
+
     // Obtener IDs pendientes
     const syncTransaction = db.transaction([PENDING_SYNC_STORE], 'readonly');
     const syncStore = syncTransaction.objectStore(PENDING_SYNC_STORE);
@@ -206,6 +213,14 @@ export const getTestLocally = async (id: string): Promise<ResistanceTest | null>
 export const getAllTestsLocally = async (): Promise<ResistanceTest[]> => {
   try {
     const db = await initDB();
+    
+    // Verificar que el store existe
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      console.warn('⚠️ Object store no existe, base de datos corrupta. Retornando array vacío.');
+      db.close();
+      return [];
+    }
+    
     const transaction = db.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
 
@@ -414,6 +429,14 @@ export const cleanOldTestsFromLocal = async (): Promise<number> => {
 export const saveTestsBatch = async (tests: ResistanceTest[]): Promise<void> => {
   try {
     const db = await initDB();
+    
+    // Verificar que el store existe
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+      console.warn('⚠️ Object store no existe, no se pueden guardar datos. Saltando...');
+      db.close();
+      return;
+    }
+    
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
 

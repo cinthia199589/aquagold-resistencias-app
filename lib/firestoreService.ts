@@ -622,95 +622,40 @@ export const loadTestsHybridDual = async (
   instance: any,
   scopes: string[]
 ): Promise<ResistanceTest[]> => {
-  log.info('🔄 Cargando con sistema dual...');
-  
-  const allTests: ResistanceTest[] = [];
-  const testIds = new Set<string>();
+  log.info('🔄 Cargando tests DIRECTAMENTE desde Firestore...');
   
   try {
-    // 1. CARGAR TESTS MIGRADOS (Sistema híbrido)
-    if (isHybridSystemActive()) {
-      log.info('📊 Cargando índice híbrido...');
-      
-      const indexRef = collection(db, COLLECTIONS.INDEX);
-      const indexSnapshot = await getDocs(
-        query(indexRef, orderBy('date', 'desc'))
-      );
-      
-      if (indexSnapshot.size > 0) {
-        log.success(`${indexSnapshot.size} tests en índice híbrido`);
-        
-        const indexData = indexSnapshot.docs.map(d => d.data() as ResistanceTestIndex);
-        
-        // Verificar cache local primero
-        const cachedTests = await getAllTestsLocally();
-        const cachedMap = new Map(cachedTests.map(t => [t.id, t]));
-        
-        // Separar: en cache vs necesitan descarga
-        const needDownload: ResistanceTestIndex[] = [];
-        
-        indexData.forEach(idx => {
-          testIds.add(idx.id);
-          
-          if (cachedMap.has(idx.id)) {
-            allTests.push(cachedMap.get(idx.id)!);
-          } else {
-            needDownload.push(idx);
-          }
-        });
-        
-        // Descargar faltantes desde OneDrive
-        if (needDownload.length > 0) {
-          log.info(`📥 Descargando ${needDownload.length} tests desde OneDrive...`);
-          
-          try {
-            const downloaded = await downloadMultipleTests(
-              instance,
-              scopes,
-              needDownload.map(idx => ({ id: idx.id, date: idx.date }))
-            );
-            
-            allTests.push(...downloaded);
-            
-            // Guardar en cache
-            await saveTestsBatch(downloaded);
-            log.success(`${downloaded.length} tests descargados y cacheados`);
-          } catch (downloadError) {
-            log.error('Error descargando desde OneDrive:', downloadError);
-            // Continuar con los que tenemos en cache
-          }
-        }
-      }
-    }
-    
-    // 2. CARGAR TESTS LEGACY (Sistema viejo - NO migrados)
-    log.info('🗂️ Cargando tests legacy...');
-    
-    const legacyRef = collection(db, COLLECTIONS.LEGACY);
-    const legacySnapshot = await getDocs(
-      query(legacyRef, orderBy('date', 'desc'))
+    // SOLUCIÓN SIMPLE: Cargar TODO desde Firestore
+    // (Firestore tiene testType correcto después de la migración)
+    const testsRef = collection(db, 'resistance_tests');
+    const testsSnapshot = await getDocs(
+      query(testsRef, orderBy('date', 'desc'))
     );
     
-    if (legacySnapshot.size > 0) {
-      const legacyTests = legacySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as ResistanceTest))
-        .filter(test => !testIds.has(test.id)); // Solo los NO migrados
-      
-      log.success(`${legacyTests.length} tests legacy (no migrados aún)`);
-      allTests.push(...legacyTests);
-      
-      // Guardar en cache local
-      if (legacyTests.length > 0) {
-        await saveTestsBatch(legacyTests);
-      }
+    if (testsSnapshot.size === 0) {
+      log.info('No hay tests en Firestore');
+      return [];
     }
     
-    // 3. ORDENAR por fecha (más recientes primero)
-    allTests.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    log.success(`${testsSnapshot.size} tests encontrados en Firestore`);
     
-    log.success(`Total cargado: ${allTests.length} tests`);
-    log.info(`  - Sistema híbrido: ${testIds.size}`);
-    log.info(`  - Sistema legacy: ${allTests.length - testIds.size}`);
+    const allTests = testsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as ResistanceTest[];
+    
+    // Verificar que tienen testType
+    const withTestType = allTests.filter(t => t.testType);
+    const withoutTestType = allTests.filter(t => !t.testType);
+    
+    log.success(`✅ ${withTestType.length} tests con testType`);
+    if (withoutTestType.length > 0) {
+      log.info(`⚠️ ${withoutTestType.length} tests sin testType (se ignorarán en filtros)`);
+    }
+    
+    // Guardar en cache para uso offline
+    await saveTestsBatch(allTests);
+    log.success(`💾 ${allTests.length} tests guardados en cache local`);
     
     return allTests;
     

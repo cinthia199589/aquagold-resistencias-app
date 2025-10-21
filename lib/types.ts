@@ -1,3 +1,44 @@
+// ============================================
+// TIPOS DE RESISTENCIA (NUEVO)
+// ============================================
+
+/**
+ * Tipo de resistencia según el contexto de trabajo
+ */
+export type TestType = 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO';
+
+/**
+ * Etiquetas amigables para mostrar en UI
+ */
+export const TEST_TYPE_LABELS: Record<TestType, string> = {
+  MATERIA_PRIMA: 'Resistencia en Materia Prima',
+  PRODUCTO_TERMINADO: 'Resistencia en Producto Terminado'
+};
+
+/**
+ * Configuración visual por tipo
+ */
+export const TEST_TYPE_CONFIG = {
+  MATERIA_PRIMA: {
+    color: 'blue',
+    bgClass: 'bg-blue-50 dark:bg-blue-900/20',
+    textClass: 'text-blue-700 dark:text-blue-300',
+    borderClass: 'border-blue-300 dark:border-blue-700',
+    badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    icon: '',
+    shortLabel: 'MP'
+  },
+  PRODUCTO_TERMINADO: {
+    color: 'green',
+    bgClass: 'bg-green-50 dark:bg-green-900/20',
+    textClass: 'text-green-700 dark:text-green-300',
+    borderClass: 'border-green-300 dark:border-green-700',
+    badgeClass: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    icon: '',
+    shortLabel: 'PT'
+  }
+} as const;
+
 export interface Sample {
   id: string;
   timeSlot: number;
@@ -14,6 +55,7 @@ export interface ResistanceTest {
   provider: string;
   pool: string;
   certificationType: 'ASC' | 'CONVENCIONAL';
+  testType: TestType; // 🆕 NUEVO CAMPO CRÍTICO
   so2Residuals?: number; // Ahora opcional
   so2Bf?: number; // Ahora opcional
   createdBy: string;

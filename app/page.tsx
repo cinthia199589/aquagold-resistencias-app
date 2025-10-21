@@ -22,8 +22,9 @@ import {
   uploadPhotoToOneDrive 
 } from '../lib/graphService';
 import { exportToExcel, generateExcelBlob } from '../lib/excelExport';
-import { ResistanceTest, Sample } from '../lib/types';
+import { ResistanceTest, Sample, TestType } from '../lib/types';
 import SearchBar from '../components/SearchBar';
+import WorkModeSwitch from '../components/WorkModeSwitch';
 import { useAutoSave } from '../lib/useAutoSave';
 import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
@@ -70,15 +71,6 @@ const requiredEnvVars = {
   clientId: process.env.NEXT_PUBLIC_MSAL_CLIENT_ID,
   tenantId: process.env.NEXT_PUBLIC_MSAL_TENANT_ID,
 };
-
-// Debug: Log variables (solo en desarrollo)
-if (typeof window !== 'undefined' && window.location.hostname.includes('localhost')) {
-  console.log('MSAL Config Debug:', {
-    clientId: requiredEnvVars.clientId ? 'SET' : 'MISSING',
-    tenantId: requiredEnvVars.tenantId ? 'SET' : 'MISSING',
-    redirectUri: getRedirectUri()
-  });
-}
 
 const msalConfig = {
   auth: {
@@ -291,15 +283,12 @@ const ResistanceTestList = ({
   return (
     <>
       <Card className="w-full max-w-7xl mx-auto">
-        <CardHeader className="p-3 sm:p-6">
-          <div className="flex flex-col gap-3 dashboard-header">
-            {/* Título y Descripción - Centrado */}
-            <div className="flex flex-col gap-3 items-center text-center w-full">
+        <CardHeader className="p-3 sm:p-4 pb-2">
+          <div className="flex flex-col gap-2.5 dashboard-header">
+            {/* Título - Más grande y destacado */}
+            <div className="flex flex-col items-center text-center w-full">
               <div className="w-full">
-                <CardTitle className="text-lg sm:text-xl dashboard-title">{showAll ? 'Historial Completo' : 'Resistencias en Progreso'}</CardTitle>
-                <CardDescription className="text-xs sm:text-sm mt-1">
-                  {showAll ? 'Todas las resistencias guardadas' : 'Resistencias activas almacenadas en Firestore'}
-                </CardDescription>
+                <CardTitle className="text-2xl sm:text-3xl font-bold dashboard-title text-white">{showAll ? 'Historial Completo' : 'Resistencias en Progreso'}</CardTitle>
               </div>
             </div>
 
@@ -325,35 +314,37 @@ const ResistanceTestList = ({
               )}
             </div>
 
-            {/* Botones de Control - Centrados */}
-            <div className="flex flex-col gap-2 w-full sm:flex-row sm:gap-3 sm:justify-center sm:items-center dashboard-buttons max-w-4xl mx-auto">
+            {/* Botones de Control - Mejorados */}
+            <div className="flex flex-col gap-1 w-full sm:flex-row sm:gap-2 sm:justify-center sm:items-center dashboard-buttons max-w-4xl mx-auto">
               <Button 
-                variant="outline" 
-                className="gap-2 text-xs sm:text-sm w-full sm:w-auto btn-mobile border-2 border-white text-white hover:bg-white hover:text-gray-900" 
+                className={`gap-2 text-xs sm:text-sm w-full sm:w-auto h-8 btn-mobile font-semibold rounded transition-all ${
+                  showAll 
+                    ? 'bg-gray-600 hover:bg-gray-700 text-white' 
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'
+                }`}
                 onClick={() => {
-                  console.log('🔘 Botón clickeado. Estado actual showAll:', showAll);
                   setShowAll(!showAll);
-                  console.log('🔄 Nuevo estado showAll:', !showAll);
                 }}
               >
-                {showAll ? '�️ HISTORIAL COMPLETO' : '� EN PROGRESO'}
+                {showAll ? 'HISTORIAL COMPLETO' : 'EN PROGRESO'}
               </Button>
               <Button 
-                variant="outline" 
-                className="gap-2 text-xs sm:text-sm w-full sm:w-auto btn-mobile border-2 border-white text-white hover:bg-white hover:text-gray-900" 
+                className={`gap-1.5 text-xs sm:text-sm w-full sm:w-auto h-8 btn-mobile font-semibold rounded transition-all ${
+                  true 
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg' 
+                    : 'bg-gray-600 hover:bg-gray-700 text-white'
+                }`}
                 onClick={() => setShowDailyReport(true)}
               >
                 <FileText size={16}/> 
-                <span className="hidden sm:inline">Reporte </span>Diario
+                <span>REPORTE</span>
               </Button>
-              
               <Button 
-                className="gap-2 text-xs sm:text-sm w-full sm:w-auto h-10 btn-mobile" 
+                className="hidden sm:flex gap-1.5 text-xs sm:text-sm w-auto h-8 btn-mobile font-semibold bg-blue-600 hover:bg-blue-700 text-white border-0"
                 onClick={() => setRoute('new-test')}
               >
                 <PlusCircle size={16}/> 
-                <span className="sm:hidden">Nueva</span>
-                <span className="hidden sm:inline">Nueva Resistencia</span>
+                <span>Nueva Resistencia</span>
               </Button>
             </div>
           </div>
@@ -493,7 +484,7 @@ const ResistanceTestList = ({
 };
 
 // Crear nueva resistencia
-const NewTestPage = ({ setRoute, onTestCreated, saveTestFn }: { setRoute: (route: string) => void; onTestCreated: () => void; saveTestFn?: (test: ResistanceTest) => Promise<void> }) => {
+const NewTestPage = ({ setRoute, onTestCreated, saveTestFn, workMode }: { setRoute: (route: string) => void; onTestCreated: () => void; saveTestFn?: (test: ResistanceTest) => Promise<void>; workMode: TestType }) => {
   const { instance } = useMsal();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -527,6 +518,7 @@ const NewTestPage = ({ setRoute, onTestCreated, saveTestFn }: { setRoute: (route
       provider: formDataObj.provider as string,
       pool: formDataObj.pool as string,
       certificationType: formDataObj.certificationType as 'ASC' | 'CONVENCIONAL',
+      testType: workMode,
       responsable: formDataObj.responsable as string,
       so2Residuals: formDataObj.so2Residuals ? Number(formDataObj.so2Residuals) : undefined,
       so2Bf: formDataObj.so2Bf ? Number(formDataObj.so2Bf) : undefined,
@@ -545,31 +537,24 @@ const NewTestPage = ({ setRoute, onTestCreated, saveTestFn }: { setRoute: (route
       console.log('🔄 Iniciando creación de resistencia:', newTest.lotNumber);
       
       // Crear carpeta en OneDrive
-      console.log('📁 Creando carpeta en OneDrive...');
       try {
         await createLotFolder(instance, loginRequest.scopes, newTest.lotNumber);
-        console.log('✅ Carpeta lista en OneDrive');
       } catch (oneDriveError: any) {
-        console.error('⚠️ Error en OneDrive (continuando):', oneDriveError);
         // Continuar incluso si falla OneDrive
       }
       
       // Guardar en Firestore
-      console.log('💾 Guardando con sistema dual...');
       if (saveTestFn) {
         await saveTestFn(newTest);
       } else {
         await saveTestToFirestore(newTest);
       }
-      console.log('✅ Guardado exitoso');
       
       alert(`✅ Resistencia ${newTest.lotNumber} creada exitosamente.`);
       onTestCreated();
       setRoute('dashboard');
     } catch (error: any) {
-      console.error('❌ Error completo:', error);
-      console.error('❌ Stack:', error.stack);
-      alert(`❌ Error al crear resistencia: ${error.message}\n\nRevisa la consola para más detalles.`);
+      alert(`❌ Error al crear resistencia: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -798,9 +783,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         } else {
           await saveTestToFirestore(updatedTest);
         }
-        console.log('✅ Foto subida y guardada automáticamente');
       } catch (saveError: any) {
-        console.error('⚠️ Error al auto-guardar:', saveError);
         // No mostrar error al usuario para no interrumpir el flujo
       }
       
@@ -808,9 +791,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       URL.revokeObjectURL(tempUrl);
       
       // Mostrar notificación exitosa
-      console.log('✅ Foto subida exitosamente (anterior reemplazada si existía)');
     } catch (error: any) {
-      console.error(`❌ Error al subir foto: ${error.message}`);
       
       // Limpiar estado de carga en caso de error
       setEditedTest(prev => ({
@@ -1473,6 +1454,7 @@ const DashboardPage = () => {
   const [allTests, setAllTests] = useState<ResistanceTest[]>([]); // Cache de TODOS los tests
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
+  const [workMode, setWorkMode] = useState<TestType>('MATERIA_PRIMA');
   
   // ✅ NUEVO: Infinite scroll - Mostrar 30 inicialmente
   const [visibleCount, setVisibleCount] = useState(30);
@@ -1508,19 +1490,14 @@ const DashboardPage = () => {
       if (isOnline) {
         try {
           // 🔄 SISTEMA DUAL: Lee de índice híbrido + Firebase legacy
-          console.log('🔄 Cargando con sistema dual híbrido...');
           const allTestsHybrid = await loadTestsHybridDual(instance, loginRequest.scopes);
           
-          console.log(`✅ ${allTestsHybrid.length} tests cargados (híbrido + legacy)`);
           setAllTests(allTestsHybrid);
           filterTests(allTestsHybrid, showAll);
           
         } catch (syncError) {
-          console.log('⚠️ Error en sincronización híbrida, usando cache local:', syncError);
           // Fallback: Seguir con datos locales
         }
-      } else {
-        console.log('📴 Sin conexión - Trabajando con datos locales');
       }
       
     } catch (error: any) {
@@ -1531,11 +1508,20 @@ const DashboardPage = () => {
 
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
+    let filtered = testsArray;
+    
+    // 1️⃣ Filtrar por tipo de resistencia (workMode)
+    filtered = filtered.filter(t => t.testType === workMode);
+    
+    // 2️⃣ Filtrar por estado (completadas o en progreso)
     if (showCompleted) {
-      setTests(testsArray); // Mostrar todos
+      // Mostrar todas (completadas + en progreso) del tipo actual
     } else {
-      setTests(testsArray.filter(t => !t.isCompleted)); // Solo en progreso
+      // Solo mostrar en progreso del tipo actual
+      filtered = filtered.filter(t => !t.isCompleted);
     }
+    
+    setTests(filtered);
     // ✅ Resetear contador de visibles al filtrar
     setVisibleCount(TESTS_PER_LOAD);
   };
@@ -1690,10 +1676,10 @@ const DashboardPage = () => {
     // return () => clearTimeout(migrationTimer);
   }, [instance, isOnline, accounts]);
 
-  // Filtrar cuando cambie showAll (INSTANTÁNEO, sin llamada a Firestore)
+  // Filtrar cuando cambie showAll o workMode (INSTANTÁNEO, sin llamada a Firestore)
   useEffect(() => {
     filterTests(allTests, showAll);
-  }, [showAll]);
+  }, [showAll, workMode]);
 
   // 🆕 Sincronizar datos pendientes al iniciar la app (SOLO si hay conexión)
   useEffect(() => {
@@ -1749,7 +1735,7 @@ const DashboardPage = () => {
   const renderContent = () => {
     switch (route) {
       case 'new-test':
-        return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadAllTests} saveTestFn={saveTestDual} />;
+        return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadAllTests} saveTestFn={saveTestDual} workMode={workMode} />;
       case 'test-detail':
         const test = tests.find(t => t.id === routeParams.id);
         if (test) return <TestDetailPage test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
@@ -1767,53 +1753,59 @@ const DashboardPage = () => {
       {/* 🔄 Banner de progreso de migración - YA NO NECESARIO (migración completada) */}
       {/* <MigrationStatusBanner /> */}
       
-      {/* Header universal - Siempre visible y centrado */}
-      <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-0 z-50">
+      {/* Header universal - Optimizado para móvil */}
+      <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between p-4">
-            {/* Eliminado logo, imagen y texto Aquagold del header por requerimiento */}
-            <div className="flex items-center gap-2">
-              <Button 
-                onClick={() => instance.logoutRedirect()} 
-                variant="outline"
-                className="text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 hover:border-red-300"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Cerrar Sesión</span>
-                <span className="sm:hidden">Salir</span>
-              </Button>
+          {/* Fila 1: Usuario y Cerrar Sesión - Ultra compacta */}
+          <div className="flex items-center justify-between px-2.5 py-1 border-b dark:border-gray-700">
+            <div className="flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300">
+              <User className="h-3 w-3" />
+              <span className="font-medium truncate max-w-[100px] sm:max-w-none">{accounts[0]?.name?.split(' ')[0] || "Lab"}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <User className="h-4 w-4 text-gray-900 dark:text-gray-100" />
-              <span className="text-gray-900 dark:text-gray-100">{accounts[0]?.name?.split(' ')[0] || "Usuario"}</span>
-            </div>
+            <button
+              onClick={() => instance.logoutRedirect()}
+              className="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors p-0.5"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="h-3 w-3" />
+            </button>
           </div>
-        </div>
-        
-        {/* Navegación universal - Centrada */}
-        <div className="border-t dark:border-gray-700">
-          <div className="flex max-w-md mx-auto">
+          
+          {/* Fila 2: Switch de modo (solo en dashboard) - Ultra compacto */}
+          {route === 'dashboard' && (
+            <div className="flex justify-center px-2 py-0.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+              <WorkModeSwitch 
+                currentMode={workMode} 
+                onModeChange={setWorkMode}
+              />
+            </div>
+          )}
+          
+          {/* Fila 3: Navegación - Lado a lado, ultra compacto */}
+          <div className="flex gap-1.5 px-2 py-1">
             <button 
               onClick={() => handleSetRoute('dashboard')} 
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded transition-all ${
                 route === 'dashboard' 
-                  ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-md hover:bg-blue-700 dark:hover:bg-blue-700' 
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400'
               }`}
             >
-              <Home className="h-4 w-4" />
-              Dashboard
+              <Home className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap hidden sm:inline">Dashboard</span>
+              <span className="whitespace-nowrap sm:hidden">Dash</span>
             </button>
             <button 
               onClick={() => handleSetRoute('new-test')} 
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded transition-all ${
                 route === 'new-test' 
-                  ? 'bg-blue-50 dark:bg-blue-900/50 text-blue-600 border-b-2 border-blue-600' 
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  ? 'bg-green-600 dark:bg-green-600 text-white shadow-md hover:bg-green-700 dark:hover:bg-green-700' 
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400'
               }`}
             >
-              <PlusCircle className="h-4 w-4" />
-              Nueva Resistencia
+              <PlusCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap hidden sm:inline">Nueva Resistencia</span>
+              <span className="whitespace-nowrap sm:hidden">Nueva</span>
             </button>
           </div>
         </div>

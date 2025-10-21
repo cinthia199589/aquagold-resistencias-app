@@ -995,6 +995,23 @@ input {
     gap: 6px;
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
   }
+
+  /* OVERRIDE: Botones del header en móvil - pequeños y discretos */
+  .sticky button:not([class*="flex-1"]),
+  header button:not([class*="flex-1"]) {
+    width: auto !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    font-size: inherit !important;
+  }
+
+  /* Botones de navegación (Dashboard, Nueva) - compactos pero no tan pequeños */
+  button[class*="flex-1"] {
+    min-height: 32px !important;
+    padding: 6px 8px !important;
+  }
   
   button:active {
     transform: translateY(-1px);
