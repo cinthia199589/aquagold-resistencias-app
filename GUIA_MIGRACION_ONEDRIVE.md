@@ -146,7 +146,85 @@ Este script:
 
 ---
 
+## � PASO 7: ¿Qué pasa con los archivos JSON?
+
+### 🎯 Los JSON son respaldos opcionales
+
+Los archivos JSON en `Aquagold_Resistencias/database/` son **respaldos redundantes**.
+
+**Tus datos principales están en:**
+1. ✅ **Firestore** (base de datos principal en la nube)
+2. ✅ **IndexedDB** (caché local en tu navegador)
+
+### ✅ Sistema de Respaldo JSON ACTIVADO
+
+Se activó el sistema de respaldo JSON en OneDrive para:
+- ✅ **Triple respaldo:** Firestore + IndexedDB + OneDrive JSON
+- ✅ **Prevenir pérdida de datos** como el caso de 0004690-25
+- ✅ **Recuperación rápida** desde archivos JSON si hay problemas
+
+**Configuración actual:**
+```typescript
+ENABLE_DUAL_WRITE: true  // ✅ Sistema JSON ACTIVADO
+```
+
+### 📋 Opciones para los JSON Antiguos
+
+**Opción 1: DEJAR COMO ESTÁN (RECOMENDADO)**
+- Los JSON antiguos quedan en `Aquagold_Resistencias/database/` como archivo histórico
+- No afectan el funcionamiento de la aplicación
+- Puedes eliminarlos después si quieres
+
+**Opción 2: MIGRARLOS MANUALMENTE (YA NO NECESARIO)**
+- El sistema ahora genera los JSON automáticamente en las carpetas correctas
+- Los JSON antiguos son solo historial
+
+**Opción 3: ELIMINARLOS**
+- Si no los necesitas (el sistema generará nuevos automáticamente)
+- Solo después de verificar que todo funciona
+
+### ✅ SISTEMA JSON ACTIVO - Funcionando Correctamente
+
+**Estado actual:** `ENABLE_DUAL_WRITE: true` ✅
+
+Los JSON ahora se guardan automáticamente en las carpetas correctas:
+
+✅ **Cambios implementados:**
+- Los JSON de **Materia Prima** se guardan en: `/Aquagold_MP/database/tests/`
+- Los JSON de **Producto Terminado** se guardan en: `/Aquagold_PT/database/tests/`
+- El sistema detecta automáticamente el tipo de cada prueba
+- Las carpetas se organizan por mes: `/2025-10/`, `/2025-11/`, etc.
+
+**Ejemplo:**
+```
+Aquagold_MP/
+└── database/
+    └── tests/
+        └── 2025-10/
+            ├── test-001.json  (MP)
+            └── test-003.json  (MP)
+
+Aquagold_PT/
+└── database/
+    └── tests/
+        └── 2025-10/
+            └── test-002.json  (PT)
+```
+
+### 💡 RECOMENDACIÓN
+**Sistema de respaldo JSON está activo y funcionando.**
+
+✅ **Cada vez que guardes o completes una resistencia:**
+- Se guarda en Firestore (base de datos principal)
+- Se guarda en IndexedDB (caché local)
+- **Se guarda en OneDrive JSON** (respaldo de seguridad)
+
+✅ **Los nuevos archivos van automáticamente a las carpetas correctas (MP o PT).**
+
+**Protección contra pérdida de datos:** Si alguno de los sistemas falla, tienes 2 respaldos adicionales.
+
+---
+
 ## 📞 Contacto
 
-Si tienes problemas con la migración, revisa este documento o pregunta.
-
+Si tienes problemas con la migración, revisa este documento o `PLAN_MIGRACION_JSON.md`.

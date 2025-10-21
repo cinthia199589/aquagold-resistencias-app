@@ -112,20 +112,35 @@ export const saveTestToFirestore = async (test: ResistanceTest): Promise<void> =
 
 /**
  * Limpia los datos cuando vienen de Firestore (convierte null a undefined)
+ * ✅ CORREGIDO: Preserva valores primitivos (0, false, '') que son válidos
  */
 const cleanDataFromFirestore = (data: any): any => {
-  if (data === null) {
+  // Null o undefined → undefined
+  if (data === null || data === undefined) {
     return undefined;
   }
   
+  // ✅ IMPORTANTE: Preservar valores primitivos válidos (0, false, '')
+  // Estos son valores legítimos, NO deben ser filtrados
+  if (typeof data === 'number' || typeof data === 'boolean' || typeof data === 'string') {
+    return data;
+  }
+  
+  // Arrays: limpiar cada elemento (pero preservar arrays vacíos válidos)
   if (Array.isArray(data)) {
     return data.map(cleanDataFromFirestore);
   }
   
-  if (data !== null && typeof data === 'object') {
+  // Objetos: limpiar recursivamente
+  if (typeof data === 'object') {
     const cleaned: any = {};
     for (const [key, value] of Object.entries(data)) {
-      cleaned[key] = cleanDataFromFirestore(value);
+      const cleanedValue = cleanDataFromFirestore(value);
+      // Incluir el campo incluso si es 0, false, o ''
+      // Solo excluir undefined
+      if (cleanedValue !== undefined) {
+        cleaned[key] = cleanedValue;
+      }
     }
     return cleaned;
   }

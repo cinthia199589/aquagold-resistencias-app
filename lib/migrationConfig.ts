@@ -33,7 +33,7 @@ export const MIGRATION_CONFIG = {
    * - true: Escribe en legacy Y híbrido (doble seguridad)
    * - false: Solo escribe en híbrido
    * 
-   * RECOMENDADO: true durante las primeras 2-4 semanas
+   * ✅ ACTIVADO: Para respaldo de seguridad en OneDrive
    */
   ENABLE_DUAL_WRITE: true,
   
@@ -139,8 +139,10 @@ export const MIGRATION_CONFIG = {
   
   /**
    * Carpeta base en OneDrive para datos JSON
+   * DEPRECADO: Usar getOneDriveDatabaseFolder() en su lugar
+   * @deprecated
    */
-  ONEDRIVE_DATABASE_FOLDER: '/Aquagold_Resistencias/database',
+  ONEDRIVE_DATABASE_FOLDER: '/Aquagold_MP/database',
   
   /**
    * Organizar tests por mes
@@ -199,12 +201,24 @@ export const shouldMigrateInBackground = (): boolean => {
 };
 
 /**
+ * Helper: Obtener carpeta de base de datos según el tipo de prueba
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
+ * @returns Carpeta base en OneDrive
+ */
+export const getOneDriveDatabaseFolder = (testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO'): string => {
+  return testType === 'MATERIA_PRIMA' 
+    ? '/Aquagold_MP/database'
+    : '/Aquagold_PT/database';
+};
+
+/**
  * Helper: Obtener carpeta OneDrive para un test
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
  * @param date Fecha del test (formato: YYYY-MM-DD)
  * @returns Ruta completa en OneDrive
  */
-export const getOneDriveFolderPath = (date: string): string => {
-  const baseFolder = MIGRATION_CONFIG.ONEDRIVE_DATABASE_FOLDER;
+export const getOneDriveFolderPath = (testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO', date: string): string => {
+  const baseFolder = getOneDriveDatabaseFolder(testType);
   
   if (MIGRATION_CONFIG.ORGANIZE_BY_MONTH) {
     // Extraer año-mes de la fecha
@@ -226,12 +240,13 @@ export const getTestFileName = (testId: string): string => {
 
 /**
  * Helper: Obtener ruta completa OneDrive para un test
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
  * @param testId ID del test
  * @param date Fecha del test
  * @returns Ruta completa
  */
-export const getTestOneDrivePath = (testId: string, date: string): string => {
-  const folder = getOneDriveFolderPath(date);
+export const getTestOneDrivePath = (testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO', testId: string, date: string): string => {
+  const folder = getOneDriveFolderPath(testType, date);
   const fileName = getTestFileName(testId);
   return `${folder}/${fileName}`;
 };

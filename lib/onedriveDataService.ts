@@ -51,9 +51,9 @@ export const uploadTestToOneDrive = async (
     
     log.info(`Subiendo test ${test.id} a OneDrive...`);
     
-    // 1. Obtener ruta OneDrive
-    const oneDrivePath = getTestOneDrivePath(test.id, test.date);
-    const folderPath = getOneDriveFolderPath(test.date);
+    // 1. Obtener ruta OneDrive (ahora incluye el tipo de prueba)
+    const oneDrivePath = getTestOneDrivePath(test.testType, test.id, test.date);
+    const folderPath = getOneDriveFolderPath(test.testType, test.date);
     const fileName = `test-${test.id}.json`;
     
     // 2. Convertir test a JSON con formato bonito
@@ -83,6 +83,7 @@ export const uploadTestToOneDrive = async (
  * 
  * @param instance MSAL instance
  * @param scopes MSAL scopes
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
  * @param testId ID del test
  * @param date Fecha del test (para ubicar carpeta)
  * @returns Test completo
@@ -90,6 +91,7 @@ export const uploadTestToOneDrive = async (
 export const downloadTestFromOneDrive = async (
   instance: any,
   scopes: string[],
+  testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO',
   testId: string,
   date: string
 ): Promise<ResistanceTest> => {
@@ -102,8 +104,8 @@ export const downloadTestFromOneDrive = async (
     
     log.info(`Descargando test ${testId} desde OneDrive...`);
     
-    // 1. Construir ruta del archivo
-    const oneDrivePath = getTestOneDrivePath(testId, date);
+    // 1. Construir ruta del archivo (ahora incluye el tipo de prueba)
+    const oneDrivePath = getTestOneDrivePath(testType, testId, date);
     
     // 2. Descargar archivo
     const content = await downloadFileFromOneDriveInternal(
@@ -129,13 +131,13 @@ export const downloadTestFromOneDrive = async (
  * 
  * @param instance MSAL instance
  * @param scopes MSAL scopes
- * @param testIds Array de {id, date}
+ * @param testIds Array de {id, date, testType}
  * @returns Array de tests completos
  */
 export const downloadMultipleTests = async (
   instance: any,
   scopes: string[],
-  testIds: Array<{ id: string; date: string }>
+  testIds: Array<{ id: string; date: string; testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO' }>
 ): Promise<ResistanceTest[]> => {
   try {
     log.info(`Descargando ${testIds.length} tests desde OneDrive...`);
@@ -148,8 +150,8 @@ export const downloadMultipleTests = async (
       const batch = testIds.slice(i, i + batchSize);
       
       const batchResults = await Promise.all(
-        batch.map(({ id, date }) =>
-          downloadTestFromOneDrive(instance, scopes, id, date)
+        batch.map(({ id, date, testType }) =>
+          downloadTestFromOneDrive(instance, scopes, testType, id, date)
         )
       );
       
@@ -173,6 +175,7 @@ export const downloadMultipleTests = async (
  * 
  * @param instance MSAL instance
  * @param scopes MSAL scopes
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
  * @param testId ID del test
  * @param date Fecha del test
  * @returns true si existe, false si no
@@ -180,11 +183,12 @@ export const downloadMultipleTests = async (
 export const testExistsInOneDrive = async (
   instance: any,
   scopes: string[],
+  testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO',
   testId: string,
   date: string
 ): Promise<boolean> => {
   try {
-    const oneDrivePath = getTestOneDrivePath(testId, date);
+    const oneDrivePath = getTestOneDrivePath(testType, testId, date);
     
     // Intentar obtener metadata del archivo
     const accounts = instance.getAllAccounts();
@@ -220,19 +224,21 @@ export const testExistsInOneDrive = async (
  * 
  * @param instance MSAL instance
  * @param scopes MSAL scopes
+ * @param testType Tipo de prueba (MATERIA_PRIMA o PRODUCTO_TERMINADO)
  * @param testId ID del test
  * @param date Fecha del test
  */
 export const deleteTestFromOneDrive = async (
   instance: any,
   scopes: string[],
+  testType: 'MATERIA_PRIMA' | 'PRODUCTO_TERMINADO',
   testId: string,
   date: string
 ): Promise<void> => {
   try {
     log.warn(`Eliminando test ${testId} de OneDrive...`);
     
-    const oneDrivePath = getTestOneDrivePath(testId, date);
+    const oneDrivePath = getTestOneDrivePath(testType, testId, date);
     
     const accounts = instance.getAllAccounts();
     if (!accounts || accounts.length === 0) {
