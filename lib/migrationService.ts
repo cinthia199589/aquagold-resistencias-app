@@ -389,6 +389,7 @@ export class MigrationService {
         const downloaded = await downloadTestFromOneDrive(
           instance,
           scopes,
+          test.testType,
           test.id,
           test.date
         );
