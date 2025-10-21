@@ -153,14 +153,23 @@ export const getInProgressTests = async (): Promise<ResistanceTest[]> => {
 
 /**
  * Obtiene las pruebas de un día específico
+ * ✅ ARREGLADO: Usa UTC para garantizar correcta zona horaria
  */
 export const getTestsByDate = async (date: string): Promise<ResistanceTest[]> => {
   try {
+    // Parsear fecha en UTC (date viene como "2025-10-18")
+    const [year, month, day] = date.split('-').map(Number);
+    const startDate = new Date(Date.UTC(year, month - 1, day));
+    const endDate = new Date(Date.UTC(year, month - 1, day + 1));
+    
+    const startDateStr = startDate.toISOString().split('T')[0]; // "2025-10-18"
+    const endDateStr = endDate.toISOString().split('T')[0];     // "2025-10-19"
+
     const testsRef = collection(db, TESTS_COLLECTION);
     const q = query(
       testsRef,
-      where('date', '>=', date),
-      where('date', '<', getNextDay(date)),
+      where('date', '>=', startDateStr),
+      where('date', '<', endDateStr),
       orderBy('date', 'asc')
     );
     
@@ -170,7 +179,7 @@ export const getTestsByDate = async (date: string): Promise<ResistanceTest[]> =>
       id: doc.id
     })) as ResistanceTest[];
     
-    console.log(`✅ ${tests.length} pruebas encontradas para ${date}`);
+    console.log(`✅ ${tests.length} pruebas encontradas para ${date} (UTC correcto)`);
     return tests;
   } catch (error: any) {
     console.error('❌ Error al buscar pruebas por fecha:', error);
@@ -488,9 +497,13 @@ export const markTestAsCompleted = async (testId: string): Promise<void> => {
 /**
  * Utilidad para obtener el día siguiente
  */
+/**
+ * Obtiene el siguiente día en formato YYYY-MM-DD (UTC correcto)
+ * ✅ Usa UTC para evitar problemas de zona horaria
+ */
 const getNextDay = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() + 1);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
   return date.toISOString().split('T')[0];
 };
 

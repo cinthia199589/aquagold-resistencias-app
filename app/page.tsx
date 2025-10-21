@@ -66,6 +66,16 @@ const getRedirectUri = () => {
   return redirectUri;
 };
 
+// ✅ Función helper para formatear fechas correctamente (sin interpretación UTC)
+const formatDateLocal = (dateStr: string): string => {
+  // dateStr viene en formato "2025-10-18"
+  const [year, month, day] = dateStr.split('-').map(Number);
+  // Crear fecha en zona horaria local (NO UTC)
+  const date = new Date(year, month - 1, day);
+  // Formatear: "18/10/2025"
+  return date.toLocaleDateString('es-EC');
+};
+
 // Validar variables de entorno críticas
 const requiredEnvVars = {
   clientId: process.env.NEXT_PUBLIC_MSAL_CLIENT_ID,
@@ -283,17 +293,15 @@ const ResistanceTestList = ({
   return (
     <>
       <Card className="w-full max-w-7xl mx-auto">
-        <CardHeader className="p-3 sm:p-4 pb-2">
-          <div className="flex flex-col gap-2.5 dashboard-header">
-            {/* Título - Más grande y destacado */}
-            <div className="flex flex-col items-center text-center w-full">
-              <div className="w-full">
-                <CardTitle className="text-2xl sm:text-3xl font-bold dashboard-title text-white">{showAll ? 'Historial Completo' : 'Resistencias en Progreso'}</CardTitle>
-              </div>
+        <CardHeader className="p-3 sm:p-4 lg:p-6 pb-2">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:gap-6 gap-2.5 dashboard-header">
+            {/* Título - Izquierda en desktop */}
+            <div className="lg:flex-1">
+              <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-bold dashboard-title text-white text-center lg:text-left">{showAll ? 'Historial Completo' : 'Resistencias en Progreso'}</CardTitle>
             </div>
 
-            {/* Búsqueda - Centrada */}
-            <div className="w-full max-w-2xl mx-auto">
+            {/* Búsqueda - Centro en desktop */}
+            <div className="lg:flex-1 max-w-2xl lg:max-w-md">
               <SearchBar onSearch={onSearch} />
               
               {/* ✅ Botón para buscar en histórico completo de Firestore */}
@@ -315,35 +323,35 @@ const ResistanceTestList = ({
             </div>
 
             {/* Botones de Control - Mejorados */}
-            <div className="flex flex-col gap-1 w-full sm:flex-row sm:gap-2 sm:justify-center sm:items-center dashboard-buttons max-w-4xl mx-auto">
+            <div className="flex flex-col gap-1 sm:gap-2 w-full sm:flex-row sm:justify-center sm:items-center lg:justify-end dashboard-buttons">
               <Button 
-                className={`gap-2 text-xs sm:text-sm w-full sm:w-auto h-8 btn-mobile font-semibold rounded transition-all ${
+                className={`gap-2 text-xs sm:text-sm lg:text-base px-4 sm:px-6 lg:px-8 py-2 sm:py-2 lg:py-3 w-full sm:w-auto font-semibold rounded-lg transition-all ${
                   showAll 
-                    ? 'bg-gray-600 hover:bg-gray-700 text-white' 
+                    ? 'bg-gray-600 hover:bg-gray-700 text-white shadow-md' 
                     : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'
                 }`}
                 onClick={() => {
                   setShowAll(!showAll);
                 }}
               >
-                {showAll ? 'HISTORIAL COMPLETO' : 'EN PROGRESO'}
+                {showAll ? '📋 HISTORIAL COMPLETO' : '⏳ EN PROGRESO'}
               </Button>
               <Button 
-                className={`gap-1.5 text-xs sm:text-sm w-full sm:w-auto h-8 btn-mobile font-semibold rounded transition-all ${
+                className={`gap-2 text-xs sm:text-sm lg:text-base px-4 sm:px-6 lg:px-8 py-2 sm:py-2 lg:py-3 w-full sm:w-auto font-semibold rounded-lg transition-all ${
                   true 
                     ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg' 
                     : 'bg-gray-600 hover:bg-gray-700 text-white'
                 }`}
                 onClick={() => setShowDailyReport(true)}
               >
-                <FileText size={16}/> 
+                <FileText size={18}/> 
                 <span>REPORTE</span>
               </Button>
               <Button 
-                className="hidden sm:flex gap-1.5 text-xs sm:text-sm w-auto h-8 btn-mobile font-semibold bg-blue-600 hover:bg-blue-700 text-white border-0"
+                className="hidden sm:flex gap-2 text-xs sm:text-sm lg:text-base px-4 sm:px-6 lg:px-8 py-2 sm:py-2 lg:py-3 font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg border-0 transition-all"
                 onClick={() => setRoute('new-test')}
               >
-                <PlusCircle size={16}/> 
+                <PlusCircle size={18}/> 
                 <span>Nueva Resistencia</span>
               </Button>
             </div>
@@ -380,14 +388,9 @@ const ResistanceTestList = ({
                         <div className="font-medium text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
                           Lote: {test.lotNumber}
                         </div>
-                        {test.isCompleted && (
-                          <span className="flex items-center gap-1 text-xs text-green-600 bg-green-100 px-1 py-0.5 rounded w-fit">
-                            <CheckCircle size={12} /> Completado
-                          </span>
-                        )}
                       </div>
                       <div className="text-xs text-gray-700 dark:text-gray-300 self-start sm:self-center">
-                        {new Date(test.date).toLocaleDateString('es-EC')}
+                        {formatDateLocal(test.date)}
                       </div>
                     </div>
                     
@@ -430,13 +433,12 @@ const ResistanceTestList = ({
               
               {/* ✅ Botón "Cargar más" si hay más tests */}
               {visibleCount < tests.length && (
-                <div className="flex justify-center mt-6">
+                <div className="flex justify-center mt-8 mb-4">
                   <Button 
                     onClick={loadMoreTests}
-                    variant="outline"
-                    className="gap-2 border-2 border-white text-white hover:bg-white hover:text-gray-900"
+                    className="w-full sm:w-auto gap-2 py-3 px-6 text-base font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg rounded-lg border-2 border-blue-500"
                   >
-                    📥 Cargar más ({tests.length - visibleCount} restantes)
+                    ⬇️ Cargar {tests.length - visibleCount} más ({tests.length - visibleCount} {tests.length - visibleCount === 1 ? 'test' : 'tests'} restantes)
                   </Button>
                 </div>
               )}
@@ -568,45 +570,45 @@ const NewTestPage = ({ setRoute, onTestCreated, saveTestFn, workMode }: { setRou
         <CardDescription className="text-gray-700">Los datos se guardarán en Firestore y OneDrive</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
           <div className="space-y-2">
-            <Label htmlFor="lotNumber" className="text-black">Número de Lote *</Label>
-            <Input name="lotNumber" id="lotNumber" placeholder="Ej: 0003540-25" required />
+            <Label htmlFor="lotNumber" className="text-black text-sm">Número de Lote *</Label>
+            <Input name="lotNumber" id="lotNumber" placeholder="Ej: 0003540-25" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="provider" className="text-black">Proveedor *</Label>
-            <Input name="provider" id="provider" placeholder="Ej: AquaPro" required />
+            <Label htmlFor="provider" className="text-black text-sm">Proveedor *</Label>
+            <Input name="provider" id="provider" placeholder="Ej: AquaPro" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="pool" className="text-black">Piscina *</Label>
-            <Input name="pool" id="pool" placeholder="Ej: P-05" required />
+            <Label htmlFor="pool" className="text-black text-sm">Piscina *</Label>
+            <Input name="pool" id="pool" placeholder="Ej: P-05" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="responsable" className="text-black">Responsable *</Label>
-            <Input name="responsable" id="responsable" placeholder="Ej: Juan Pérez" required />
+            <Label htmlFor="responsable" className="text-black text-sm">Responsable *</Label>
+            <Input name="responsable" id="responsable" placeholder="Ej: Juan Pérez" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="date" className="text-black">Fecha *</Label>
-            <Input name="date" id="date" type="date" required />
+            <Label htmlFor="date" className="text-black text-sm">Fecha *</Label>
+            <Input name="date" id="date" type="date" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="startTime" className="text-black">Hora de Inicio *</Label>
-            <Input name="startTime" id="startTime" type="time" required />
+            <Label htmlFor="startTime" className="text-black text-sm">Hora de Inicio *</Label>
+            <Input name="startTime" id="startTime" type="time" className="h-10" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="certificationType" className="text-black">Certificación *</Label>
-            <Select name="certificationType" id="certificationType" required>
+            <Label htmlFor="certificationType" className="text-black text-sm">Certificación *</Label>
+            <Select name="certificationType" id="certificationType" className="h-10" required>
               <option value="ASC">ASC</option>
               <option value="CONVENCIONAL">CONVENCIONAL</option>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="so2Residuals" className="text-black">Residual SO2 MW (opcional)</Label>
-            <Input name="so2Residuals" id="so2Residuals" type="number" step="0.1" placeholder="Ej: 15.5" />
+            <Label htmlFor="so2Residuals" className="text-black text-sm">Residual SO2 MW (opcional)</Label>
+            <Input name="so2Residuals" id="so2Residuals" type="number" step="0.1" placeholder="Ej: 15.5" className="h-10" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="so2Bf" className="text-black">Residual SO2 BF (opcional)</Label>
-            <Input name="so2Bf" id="so2Bf" type="number" step="0.1" placeholder="Ej: 12.3" />
+            <Label htmlFor="so2Bf" className="text-black text-sm">Residual SO2 BF (opcional)</Label>
+            <Input name="so2Bf" id="so2Bf" type="number" step="0.1" placeholder="Ej: 12.3" className="h-10" />
           </div>
           <div className="md:col-span-2 flex justify-end gap-4">
             <Button type="button" variant="outline" onClick={() => setRoute('dashboard')} disabled={isSaving}>
@@ -952,7 +954,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 )}
               </div>
               <CardDescription className="text-sm">
-                {test.provider} - Piscina {test.pool} - {new Date(test.date).toLocaleDateString('es-EC')}
+                {test.provider} - Piscina {test.pool} - {formatDateLocal(test.date)}
               </CardDescription>
               {!editedTest.isCompleted && (
                 <div className="mt-2 text-xs sm:text-sm space-y-1">
@@ -1793,9 +1795,9 @@ const DashboardPage = () => {
             </button>
           </div>
           
-          {/* Fila 2: Switch de modo (solo en dashboard) - Ultra compacto */}
+          {/* Fila 2: Switch de modo (solo en dashboard) - Con espaciado */}
           {route === 'dashboard' && (
-            <div className="flex justify-center px-2 py-0.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+            <div className="flex justify-center px-2 py-2 sm:py-2.5 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
               <WorkModeSwitch 
                 currentMode={workMode} 
                 onModeChange={setWorkMode}
@@ -1803,8 +1805,8 @@ const DashboardPage = () => {
             </div>
           )}
           
-          {/* Fila 3: Navegación - Lado a lado, ultra compacto */}
-          <div className="flex gap-1.5 px-2 py-1">
+          {/* Fila 3: Navegación - Lado a lado */}
+          <div className="flex gap-1.5 px-2 py-2 sm:py-2.5">
             <button 
               onClick={() => handleSetRoute('dashboard')} 
               className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded transition-all ${
@@ -1835,8 +1837,8 @@ const DashboardPage = () => {
 
       {/* Main content - Centrado en desktop */}
       <div className="flex flex-col w-full min-w-0 items-center">
-        {/* Main content con padding responsive y centrado */}
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 xl:p-8 w-full min-w-0 max-w-7xl overflow-x-hidden">
+        {/* Main content con padding responsive y centrado - Min height solo cuando está vacío */}
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 xl:p-8 w-full min-w-0 max-w-7xl overflow-x-hidden h-auto">
           {renderContent()}
         </main>
       </div>
