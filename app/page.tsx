@@ -1454,7 +1454,10 @@ const DashboardPage = () => {
   const [allTests, setAllTests] = useState<ResistanceTest[]>([]); // Cache de TODOS los tests
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
+  
+  // 💾 PERSISTENTE: El modo se guarda en localStorage
   const [workMode, setWorkMode] = useState<TestType>('MATERIA_PRIMA');
+  const [workModeSaved, setWorkModeSaved] = useState(false);
   
   // ✅ NUEVO: Infinite scroll - Mostrar 30 inicialmente
   const [visibleCount, setVisibleCount] = useState(30);
@@ -1505,6 +1508,25 @@ const DashboardPage = () => {
       alert(`❌ Error: ${error.message}`);
     }
   };
+
+  // 💾 PERSISTENCIA: Cargar modo guardado y guardar cuando cambie
+  useEffect(() => {
+    // Al montar: cargar modo guardado
+    if (typeof window !== 'undefined' && !workModeSaved) {
+      const savedMode = localStorage.getItem('workMode') as TestType | null;
+      if (savedMode) {
+        setWorkMode(savedMode);
+      }
+      setWorkModeSaved(true);
+    }
+  }, [workModeSaved]);
+
+  // Guardar modo cuando cambie
+  useEffect(() => {
+    if (workModeSaved && typeof window !== 'undefined') {
+      localStorage.setItem('workMode', workMode);
+    }
+  }, [workMode, workModeSaved]);
 
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {

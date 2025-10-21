@@ -54,41 +54,18 @@ export default function WorkModeSwitch({ currentMode, onModeChange, isChanging =
       {showConfirmation && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-gradient-to-b from-gray-900 to-gray-800 dark:from-gray-900 dark:to-gray-800 rounded-xl shadow-2xl max-w-sm w-full p-8 border border-gray-700">
-            {/* Icono de advertencia */}
-            <div className="text-center mb-6">
-              <div className="text-6xl mb-4 animate-pulse">⚠️</div>
-              <h3 className="text-2xl font-bold text-white mb-1">
-                ¿Cambiar modo?
+            {/* Mensaje de cambio - Texto grande y directo */}
+            <div className="text-center mb-8">
+              <p className="text-gray-300 text-sm mb-3">Se cambiará a:</p>
+              <h3 className="text-5xl sm:text-6xl font-black text-white mb-4 leading-tight">
+                {TEST_TYPE_LABELS[nextMode]}
               </h3>
             </div>
 
-            {/* Transición visual */}
-            <div className="flex items-center justify-center gap-2 mb-8 bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-              <div className={`${currentConfig.badgeClass} px-3 py-2 rounded font-bold text-sm whitespace-nowrap`}>
-                {TEST_TYPE_LABELS[currentMode]}
-              </div>
-              <div className="text-2xl text-gray-400">→</div>
-              <div className={`${nextConfig.badgeClass} px-3 py-2 rounded font-bold text-sm whitespace-nowrap`}>
-                {TEST_TYPE_LABELS[nextMode]}
-              </div>
-            </div>
-
-            {/* Información clara y concisa */}
-            <div className="bg-amber-900/30 border border-amber-700/50 rounded-lg p-4 mb-8">
-              <div className="space-y-2 text-sm text-amber-100">
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-400 mt-0.5">•</span>
-                  <span>Solo verás <strong>{TEST_TYPE_LABELS[nextMode]}</strong></span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-400 mt-0.5">•</span>
-                  <span>Los datos actuales se guardan</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-400 mt-0.5">•</span>
-                  <span>Puedes cambiar cuando quieras</span>
-                </div>
-              </div>
+            {/* Información rápida */}
+            <div className="text-gray-300 text-center text-sm mb-8 space-y-2">
+              <p>✓ El modo se guardará cuando cierres la app</p>
+              <p>✓ Todos tus datos se mantienen</p>
             </div>
 
             {/* Botones */}
