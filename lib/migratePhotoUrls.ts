@@ -10,7 +10,7 @@ import { ResistanceTest, TestType } from './types';
 interface Sample {
   id: string;
   weight?: number;
-  photoURL?: string;
+  photoUrl?: string;
   [key: string]: any;
 }
 
@@ -45,9 +45,9 @@ export async function migratePhotoUrls() {
       let photosInTest = 0;
 
       const samples = test.samples.map((sample: Sample) => {
-        if (sample.photoURL && sample.photoURL.includes('Aquagold_Resistencias')) {
-          const oldURL = sample.photoURL;
-          const newURL = sample.photoURL.replace('Aquagold_Resistencias', folderName);
+        if (sample.photoUrl && sample.photoUrl.includes('Aquagold_Resistencias')) {
+          const oldURL = sample.photoUrl;
+          const newURL = sample.photoUrl.replace('Aquagold_Resistencias', folderName);
           
           console.log(`   📸 Muestra ${sample.id}:`);
           console.log(`      ❌ ANTES:   ...${oldURL.substring(oldURL.indexOf('Aquagold'))}`);
@@ -56,7 +56,7 @@ export async function migratePhotoUrls() {
           updatedSamples = true;
           photosInTest++;
           totalPhotos++;
-          return { ...sample, photoURL: newURL };
+          return { ...sample, photoUrl: newURL };
         }
         return sample;
       });
