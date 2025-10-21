@@ -1,6 +1,12 @@
 import { IPublicClientApplication } from "@azure/msal-browser";
-import { ResistanceTest } from "./types";
+import { ResistanceTest, TestType } from "./types";
 
+// Función para obtener la carpeta según el tipo de test
+const getOneDriveFolderByType = (testType: TestType): string => {
+  return testType === 'MATERIA_PRIMA' ? 'Aquagold_MP' : 'Aquagold_PT';
+};
+
+// Mantener la constante antigua para compatibilidad (eliminar después de migración)
 const APP_ROOT_FOLDER = "Aquagold_Resistencias";
 
 const getGraphClient = async (msalInstance: IPublicClientApplication, scopes: string[]) => {
@@ -95,20 +101,52 @@ export const ensureAppFolderExists = async (
 };
 
 /**
+ * Asegura que existe la carpeta del tipo de test (MP o PT)
+ */
+export const ensureTypeFolderExists = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  testType: TestType
+) => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
+  
+  try {
+    await callApi(`/me/drive/root:/${folderName}`);
+    console.log(`✅ Carpeta ${folderName} existe`);
+  } catch {
+    console.log(`📁 Creando carpeta ${folderName}...`);
+    await callApi(
+      "/me/drive/root/children",
+      "POST",
+      JSON.stringify({
+        name: folderName,
+        folder: {},
+        "@microsoft.graph.conflictBehavior": "rename"
+      })
+    );
+    console.log(`✅ Carpeta ${folderName} creada exitosamente`);
+  }
+};
+
+/**
  * Crea la carpeta de un lote específico
  */
 export const createLotFolder = async (
   msalInstance: IPublicClientApplication,
   scopes: string[],
-  lotNumber: string
+  lotNumber: string,
+  testType: TestType
 ): Promise<void> => {
   const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
   
-  await ensureAppFolderExists(msalInstance, scopes);
+  // Asegurar que existe la carpeta raíz del tipo
+  await ensureTypeFolderExists(msalInstance, scopes, testType);
   
   try {
     await callApi(
-      `/me/drive/root:/${APP_ROOT_FOLDER}:/children`,
+      `/me/drive/root:/${folderName}:/children`,
       "POST",
       JSON.stringify({
         name: lotNumber,
@@ -116,7 +154,7 @@ export const createLotFolder = async (
         "@microsoft.graph.conflictBehavior": "rename" // Si existe, renombra automáticamente
       })
     );
-    console.log(`✅ Carpeta ${lotNumber} creada en OneDrive`);
+    console.log(`✅ Carpeta ${lotNumber} creada en OneDrive (${folderName})`);
   } catch (error: any) {
     // Si ya existe (409), no es un error crítico
     if (error.message.includes("nameAlreadyExists") || error.message.includes("409")) {
@@ -135,17 +173,19 @@ export const saveExcelToOneDrive = async (
   msalInstance: IPublicClientApplication,
   scopes: string[],
   lotNumber: string,
-  excelBlob: Blob
+  excelBlob: Blob,
+  testType: TestType
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
   
   try {
     const fileName = `${lotNumber}_reporte.xlsx`;
-    const endpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}:/content`;
+    const endpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     await callApi(endpoint, "PUT", excelBlob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     
-    console.log(`✅ Excel guardado en OneDrive: ${fileName}`);
+    console.log(`✅ Excel guardado en OneDrive (${folderName}): ${fileName}`);
     return endpoint;
   } catch (error: any) {
     console.error(`❌ Error al guardar Excel:`, error);
@@ -161,17 +201,19 @@ export const uploadPhotoToOneDrive = async (
   scopes: string[],
   lotNumber: string,
   sampleId: string,
-  photoBlob: Blob
+  photoBlob: Blob,
+  testType: TestType
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
 
   try {
     const fileName = `foto_${sampleId}.jpg`;
-    const uploadEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}:/content`;
+    const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     // INTENTAR ELIMINAR LA FOTO ANTERIOR si existe (para forzar reemplazo)
     try {
-      const deleteEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+      const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}`;
       await callApi(deleteEndpoint, "DELETE");
       console.log(`🗑️ Foto anterior eliminada: ${fileName}`);
     } catch (deleteError) {
@@ -183,15 +225,15 @@ export const uploadPhotoToOneDrive = async (
     const uploadResponse = await callApi(uploadEndpoint, "PUT", photoBlob, "image/jpeg");
     
     // Obtener la URL de visualización de OneDrive con cache-busting
-    const fileInfoEndpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+    const fileInfoEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}`;
     const fileInfo = await callApi(fileInfoEndpoint, "GET");
     
     // Agregar timestamp para evitar cache del navegador
     const timestamp = Date.now();
-    const baseUrl = fileInfo.webUrl || `${APP_ROOT_FOLDER}/${lotNumber}/${fileName}`;
+    const baseUrl = fileInfo.webUrl || `${folderName}/${lotNumber}/${fileName}`;
     const photoUrl = `${baseUrl}?t=${timestamp}`;
     
-    console.log(`✅ Foto subida a OneDrive: ${fileName}`);
+    console.log(`✅ Foto subida a OneDrive (${folderName}): ${fileName}`);
     console.log(`📎 URL con cache-busting: ${photoUrl}`);
     
     return photoUrl;
@@ -225,5 +267,32 @@ export const saveDailyReportToOneDrive = async (
   } catch (error: any) {
     console.error(`❌ Error al guardar reporte diario:`, error);
     throw new Error(`Error al guardar reporte: ${error.message}`);
+  }
+};
+
+/**
+ * Elimina la carpeta completa de un lote en OneDrive (fotos + Excel)
+ */
+export const deleteLotFolderFromOneDrive = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  lotNumber: string,
+  testType: TestType
+): Promise<void> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
+  
+  try {
+    const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}`;
+    await callApi(deleteEndpoint, "DELETE");
+    console.log(`🗑️ Carpeta ${lotNumber} eliminada de OneDrive (${folderName})`);
+  } catch (error: any) {
+    // Si no existe (404), no es un error crítico
+    if (error.message.includes("404") || error.message.includes("itemNotFound")) {
+      console.log(`ℹ️ Carpeta ${lotNumber} no existía en OneDrive`);
+      return;
+    }
+    console.error(`❌ Error al eliminar carpeta de OneDrive:`, error);
+    throw new Error(`Error al eliminar carpeta: ${error.message}`);
   }
 };

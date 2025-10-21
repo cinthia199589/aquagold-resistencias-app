@@ -510,7 +510,13 @@ const getNextDay = (dateStr: string): string => {
 /**
  * Elimina una resistencia de Firestore Y del almacenamiento local
  */
-export const deleteTest = async (testId: string): Promise<void> => {
+export const deleteTest = async (
+  testId: string, 
+  lotNumber?: string, 
+  testType?: import('./types').TestType,
+  msalInstance?: any,
+  scopes?: string[]
+): Promise<void> => {
   // Eliminar de local primero (siempre)
   try {
     await deleteTestLocally(testId);
@@ -534,6 +540,21 @@ export const deleteTest = async (testId: string): Promise<void> => {
     console.error('❌ Error al eliminar de Firestore:', error);
     console.warn('⚠️ Test eliminado localmente, pero no de Firestore');
     // No lanzar error - el test ya fue eliminado localmente
+  }
+
+  // Intentar eliminar carpeta de OneDrive si se proporcionan los datos
+  if (lotNumber && testType && msalInstance && scopes) {
+    try {
+      const { deleteLotFolderFromOneDrive } = await import('./graphService');
+      await deleteLotFolderFromOneDrive(msalInstance, scopes, lotNumber, testType);
+      console.log(`✅ Carpeta ${lotNumber} eliminada de OneDrive`);
+    } catch (oneDriveError: any) {
+      console.error('❌ Error al eliminar de OneDrive:', oneDriveError);
+      console.warn('⚠️ Test eliminado de Firestore, pero no de OneDrive');
+      // No lanzar error - el test ya fue eliminado de Firestore
+    }
+  } else {
+    console.warn('ℹ️ No se eliminó de OneDrive (faltan parámetros)');
   }
 };
 

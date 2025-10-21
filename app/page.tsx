@@ -29,6 +29,7 @@ import { useAutoSave } from '../lib/useAutoSave';
 import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
 import { useOnlineStatus, OfflineBanner } from '../lib/offlineDetector';
+import { migratePhotoUrls } from '../lib/migratePhotoUrls';
 
 // ⚡ LAZY LOADING - Componentes cargados bajo demanda
 const DailyReportModal = dynamic(() => import('../components/DailyReportModal'), {
@@ -242,7 +243,8 @@ const ResistanceTestList = ({
   isSearching: boolean;
 }) => {
   const [showDailyReport, setShowDailyReport] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; lotNumber: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<ResistanceTest | null>(null);
+  const loginRequest = { scopes: ["User.Read", "Files.ReadWrite"] };
 
   const formatTimeSlot = (baseTime: string, hoursToAdd: number) => {
     try {
@@ -274,16 +276,10 @@ const ResistanceTestList = ({
     return totalFields > 0 ? (completedFields / totalFields) * 100 : 0;
   };
 
-  const handleDelete = async (testId: string, lotNumber: string, event: React.MouseEvent) => {
-    event.stopPropagation(); // Evitar que se abra el detalle al hacer clic en eliminar
-    
-    if (!confirm(`¿Está seguro de eliminar la resistencia del lote ${lotNumber}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
-
+  const handleDelete = async (test: ResistanceTest) => {
     try {
-      await deleteTest(testId);
-      alert('✅ Resistencia eliminada exitosamente');
+      await deleteTest(test.id, test.lotNumber, test.testType, instance, loginRequest.scopes);
+      alert('✅ Resistencia eliminada exitosamente (incluyendo archivos de OneDrive)');
       onRefresh();
     } catch (error: any) {
       alert(`❌ Error al eliminar: ${error.message}`);
@@ -459,7 +455,7 @@ const ResistanceTestList = ({
               ¿Está seguro de que desea eliminar la resistencia del lote <strong className="text-red-400">{deleteConfirm.lotNumber}</strong>?
             </p>
             <p className="text-sm text-gray-400 mb-6 bg-red-900 bg-opacity-30 border border-red-700 rounded p-3">
-              ⚠️ Esta acción <strong>NO se puede deshacer</strong>. Se eliminarán todos los datos asociados.
+              ⚠️ Esta acción <strong>NO se puede deshacer</strong>. Se eliminarán todos los datos asociados (Firestore + OneDrive).
             </p>
             <div className="flex gap-3">
               <button
@@ -470,7 +466,7 @@ const ResistanceTestList = ({
               </button>
               <button
                 onClick={async () => {
-                  await handleDelete(deleteConfirm.id, deleteConfirm.lotNumber, { stopPropagation: () => {} } as any);
+                  await handleDelete(deleteConfirm);
                   setDeleteConfirm(null);
                 }}
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors border-2 border-red-500"
@@ -489,6 +485,7 @@ const ResistanceTestList = ({
 const NewTestPage = ({ setRoute, onTestCreated, saveTestFn, workMode }: { setRoute: (route: string) => void; onTestCreated: () => void; saveTestFn?: (test: ResistanceTest) => Promise<void>; workMode: TestType }) => {
   const { instance } = useMsal();
   const [isSaving, setIsSaving] = useState(false);
+  const loginRequest = { scopes: ["User.Read", "Files.ReadWrite"] };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -540,8 +537,11 @@ const NewTestPage = ({ setRoute, onTestCreated, saveTestFn, workMode }: { setRou
       
       // Crear carpeta en OneDrive
       try {
-        await createLotFolder(instance, loginRequest.scopes, newTest.lotNumber);
+        console.log('📁 Intentando crear carpeta en OneDrive:', newTest.lotNumber, 'Tipo:', workMode);
+        await createLotFolder(instance, loginRequest.scopes, newTest.lotNumber, workMode);
+        console.log('✅ Carpeta creada exitosamente en OneDrive');
       } catch (oneDriveError: any) {
+        console.error('⚠️ Error al crear carpeta en OneDrive (continuando):', oneDriveError.message);
         // Continuar incluso si falla OneDrive
       }
       
@@ -768,7 +768,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       }));
       
       // Subir SOLO a OneDrive (esto eliminará la anterior y subirá la nueva)
-      const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file);
+      const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file, editedTest.testType);
       
       // Actualizar con URL real y limpiar estado de carga
       const updatedTest = {
@@ -895,7 +895,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       const excelBlob = generateExcelBlob(completedTest);
       
       // Guardar Excel en OneDrive
-      await saveExcelToOneDrive(instance, loginRequest.scopes, completedTest.lotNumber, excelBlob);
+      await saveExcelToOneDrive(instance, loginRequest.scopes, completedTest.lotNumber, excelBlob, completedTest.testType);
       
       // Actualizar estado local
       setEditedTest(completedTest);
@@ -1421,8 +1421,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     return;
                   }
                   try {
-                    await deleteTest(editedTest.id);
-                    alert('✅ Resistencia eliminada completamente');
+                    await deleteTest(editedTest.id, editedTest.lotNumber, editedTest.testType, instance, loginRequest.scopes);
+                    alert('✅ Resistencia eliminada completamente (Firestore + OneDrive)');
                     onTestUpdated();
                     setRoute('dashboard');
                   } catch (error: any) {
@@ -1954,6 +1954,14 @@ const DevModeWrapper = ({ children }: { children: React.ReactNode }) => {
 // App principal
 const App = () => {
   const { instance, loading, error } = useMsalInstance();
+
+  // Exponer función de migración globalmente para uso en consola
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).migratePhotoUrls = migratePhotoUrls;
+      console.log('🔧 Función migratePhotoUrls() disponible en consola');
+    }
+  }, []);
 
   // Registrar Service Worker para PWA
   useEffect(() => {

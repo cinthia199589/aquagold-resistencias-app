@@ -21,7 +21,8 @@
     "lint": "next lint",
     "generate-cert": "openssl req -x509 -newkey rsa:2048 -keyout certs/localhost.key -out certs/localhost.crt -days 365 -nodes -subj '/CN=localhost'",
     "generate-icons": "node scripts/generate-pwa-icons.js",
-    "pwa:check": "node scripts/check-pwa.js"
+    "pwa:check": "node scripts/check-pwa.js",
+    "migrate-photo-urls": "npx tsx scripts/migrate-photo-urls.ts"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.11.1",
@@ -47,7 +48,8 @@
     "eslint": "^8.56.0",
     "eslint-config-next": "14.0.4",
     "local-ssl-proxy": "^2.0.5",
-    "sharp": "^0.34.4"
+    "sharp": "^0.34.4",
+    "tsx": "^4.20.6"
   },
   "overrides": {
     "@azure/msal-react": {
