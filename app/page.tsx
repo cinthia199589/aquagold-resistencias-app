@@ -567,7 +567,6 @@ const NewTestPage = ({ setRoute, onTestCreated, saveTestFn, workMode }: { setRou
       <CardHeader>
         <CardTitle className="text-black">Crear Nueva Resistencia</CardTitle>
 ```
-        <CardDescription className="text-gray-700">Los datos se guardarán en Firestore y OneDrive</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -1831,28 +1830,27 @@ const DashboardPage = () => {
           )}
           
           {/* Fila 3: Navegación - Lado a lado */}
-          <div className="flex gap-1.5 px-2 py-2 sm:py-2.5">
+          <div className="flex gap-2 px-2 py-2 sm:py-2.5">
             <button 
               onClick={() => handleSetRoute('dashboard')} 
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
                 route === 'dashboard' 
                   ? 'bg-blue-600 dark:bg-blue-600 text-white shadow-md hover:bg-blue-700 dark:hover:bg-blue-700' 
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400'
               }`}
             >
-              <Home className="h-3.5 w-3.5 flex-shrink-0" />
-              <span className="whitespace-nowrap hidden sm:inline">Dashboard</span>
-              <span className="whitespace-nowrap sm:hidden">Dash</span>
+              <Home className="h-4 w-4 flex-shrink-0" />
+              <span className="whitespace-nowrap">Dashboard</span>
             </button>
             <button 
               onClick={() => handleSetRoute('new-test')} 
-              className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-semibold rounded transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
                 route === 'new-test' 
                   ? 'bg-green-600 dark:bg-green-600 text-white shadow-md hover:bg-green-700 dark:hover:bg-green-700' 
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400'
               }`}
             >
-              <PlusCircle className="h-3.5 w-3.5 flex-shrink-0" />
+              <PlusCircle className="h-4 w-4 flex-shrink-0" />
               <span className="whitespace-nowrap hidden sm:inline">Nueva Resistencia</span>
               <span className="whitespace-nowrap sm:hidden">Nueva</span>
             </button>
