@@ -196,6 +196,65 @@ export const saveExcelToOneDrive = async (
 /**
  * Sube una foto a OneDrive
  */
+/**
+ * Verifica y crea las carpetas necesarias para subir fotos
+ */
+const ensureLotFolderExists = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  folderName: string,
+  lotNumber: string
+): Promise<void> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  
+  try {
+    console.log(`🔍 Verificando estructura de carpetas para: ${folderName}/${lotNumber}`);
+    
+    // 1. Verificar que la carpeta raíz existe (MATERIA_PRIMA o PRODUCTO_TERMINADO)
+    try {
+      await callApi(`/me/drive/root:/${folderName}`, "GET");
+      console.log(`✅ Carpeta raíz existe: ${folderName}`);
+    } catch (e: any) {
+      if (e.message?.includes("404") || e.message?.includes("itemNotFound")) {
+        console.log(`📁 Creando carpeta raíz: ${folderName}`);
+        const createFolderBody = {
+          name: folderName,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        };
+        await callApi(`/me/drive/root/children`, "POST", createFolderBody);
+        console.log(`✅ Carpeta raíz creada: ${folderName}`);
+      } else {
+        throw e;
+      }
+    }
+    
+    // 2. Verificar que carpeta de lote existe
+    try {
+      await callApi(`/me/drive/root:/${folderName}/${lotNumber}`, "GET");
+      console.log(`✅ Carpeta de lote existe: ${lotNumber}`);
+    } catch (e: any) {
+      if (e.message?.includes("404") || e.message?.includes("itemNotFound")) {
+        console.log(`📁 Creando carpeta de lote: ${lotNumber}`);
+        // Obtener ID de carpeta raíz
+        const rootFolder = await callApi(`/me/drive/root:/${folderName}`, "GET");
+        const createFolderBody = {
+          name: lotNumber,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        };
+        await callApi(`/me/drive/items/${rootFolder.id}/children`, "POST", createFolderBody);
+        console.log(`✅ Carpeta de lote creada: ${lotNumber}`);
+      } else {
+        throw e;
+      }
+    }
+  } catch (error: any) {
+    console.error(`❌ Error al verificar/crear carpetas:`, error);
+    throw new Error(`No se pudieron crear las carpetas necesarias: ${error.message}`);
+  }
+};
+
 export const uploadPhotoToOneDrive = async (
   msalInstance: IPublicClientApplication,
   scopes: string[],
@@ -208,8 +267,13 @@ export const uploadPhotoToOneDrive = async (
   const folderName = getOneDriveFolderByType(testType);
 
   try {
+    // ✨ FASE 1 FIX: Asegurar que carpetas existen antes de subir
+    await ensureLotFolderExists(msalInstance, scopes, folderName, lotNumber);
+    
     const fileName = `foto_${sampleId}.jpg`;
     const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
+    
+    console.log(`📤 Iniciando carga de foto: ${fileName}`);
     
     // INTENTAR ELIMINAR LA FOTO ANTERIOR si existe (para forzar reemplazo)
     try {
@@ -224,17 +288,26 @@ export const uploadPhotoToOneDrive = async (
     // Subir la nueva foto
     const uploadResponse = await callApi(uploadEndpoint, "PUT", photoBlob, "image/jpeg");
     
-    // Obtener la URL de visualización de OneDrive con cache-busting
-    const fileInfoEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}`;
-    const fileInfo = await callApi(fileInfoEndpoint, "GET");
+    // ✨ FASE 1 FIX: Validar que la respuesta tiene los datos esperados
+    if (!uploadResponse || !uploadResponse.id) {
+      console.error(`❌ Respuesta inválida de OneDrive:`, uploadResponse);
+      throw new Error(`OneDrive devolvió respuesta inválida (sin ID de archivo)`);
+    }
     
-    // Agregar timestamp para evitar cache del navegador
-    const timestamp = Date.now();
-    const baseUrl = fileInfo.webUrl || `${folderName}/${lotNumber}/${fileName}`;
-    const photoUrl = `${baseUrl}?t=${timestamp}`;
+    if (!uploadResponse.webUrl) {
+      console.error(`❌ OneDrive no devolvió webUrl:`, uploadResponse);
+      throw new Error(`OneDrive no devolvió URL válida`);
+    }
     
-    console.log(`✅ Foto subida a OneDrive (${folderName}): ${fileName}`);
-    console.log(`📎 URL con cache-busting: ${photoUrl}`);
+    console.log(`✅ Archivo subido correctamente a OneDrive`);
+    console.log(`   ID: ${uploadResponse.id}`);
+    console.log(`   URL: ${uploadResponse.webUrl}`);
+    console.log(`   Tamaño: ${uploadResponse.size} bytes`);
+    
+    // Usar directamente webUrl de OneDrive (es más confiable que construirla)
+    const photoUrl = uploadResponse.webUrl;
+    
+    console.log(`✅ Foto lista para descargar: ${photoUrl}`);
     
     return photoUrl;
   } catch (error: any) {

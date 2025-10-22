@@ -769,6 +769,15 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Subir SOLO a OneDrive (esto eliminará la anterior y subirá la nueva)
       const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file, editedTest.testType);
       
+      // ✨ FASE 1 FIX: Verificar que la URL es válida antes de guardar
+      console.log(`🔍 Verificando que la URL es válida...`);
+      if (!photoUrl || photoUrl.trim() === '') {
+        throw new Error("La foto se subió pero no se generó una URL válida");
+      }
+      
+      console.log(`✅ Foto subida exitosamente a OneDrive`);
+      console.log(`   URL: ${photoUrl}`);
+      
       // Actualizar con URL real y limpiar estado de carga
       const updatedTest = {
         ...editedTest,
@@ -777,15 +786,19 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       setEditedTest(updatedTest);
       
-      // 🔥 AUTO-GUARDAR con sistema dual inmediatamente después de subir foto
+      // 🔥 AUTO-GUARDAR: Guardar foto en Firestore inmediatamente
+      console.log(`💾 Guardando URL de foto en Firestore...`);
       try {
         if (saveTestFn) {
           await saveTestFn(updatedTest);
         } else {
           await saveTestToFirestore(updatedTest);
         }
+        console.log(`✅ Foto guardada exitosamente en Firestore`);
       } catch (saveError: any) {
+        console.error(`⚠️ Error al guardar foto en Firestore:`, saveError);
         // No mostrar error al usuario para no interrumpir el flujo
+        // La foto está en OneDrive, solo no se guardó la referencia
       }
       
       // Limpiar URL temporal
@@ -793,7 +806,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       // Mostrar notificación exitosa
     } catch (error: any) {
+      console.error(`❌ Error FINAL al subir foto:`, error);
       
+      // ✨ FASE 1 FIX: NO guardar URL inválida en Firestore
       // Limpiar estado de carga en caso de error
       setEditedTest(prev => ({
         ...prev,
@@ -805,6 +820,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         alert("❌ Sesión expirada. Por favor, recarga la página para volver a iniciar sesión.");
       } else if (error.message.includes("MSAL no está disponible")) {
         alert("❌ Error de autenticación. Por favor, recarga la página.");
+      } else if (error.message.includes("carpetas")) {
+        alert("❌ Error al crear las carpetas necesarias en OneDrive. Verifica permisos.");
       } else {
         alert(`❌ Error al subir foto: ${error.message}`);
       }
@@ -1081,12 +1098,29 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               <option value="CONVENCIONAL">CONVENCIONAL</option>
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="startTime" className="font-semibold text-xs sm:text-sm">🕐 Hora de Inicio *</Label>
+            <Input 
+              id="startTime" 
+              type="time"
+              value={editedTest.startTime}
+              onChange={(e) => {
+                const newTime = e.target.value;
+                if (newTime && /^\d{2}:\d{2}$/.test(newTime)) {
+                  setEditedTest(prev => ({ ...prev, startTime: newTime }));
+                }
+              }}
+              disabled={editedTest.isCompleted}
+              className="h-11 font-semibold"
+              title="Ajusta la hora de inicio si se ingresó incorrectamente"
+            />
+          </div>
         </div>
 
-        {/* Campos de SO2 editables */}
+        {/* Campos de SO2 editables - Permite números o texto (ej: N/A) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="space-y-1">
-            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW *</Label>
+            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW (números o N/A)</Label>
             <Input 
               id="so2Residuals" 
               type="text"
@@ -1096,10 +1130,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2ResidualsText(value);
                 
-                // Convertir a número cuando sea posible (sin bloquear la escritura)
-                if (value === '') {
+                // Si es "N/A" o texto, mantener como undefined en editedTest
+                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
                   setEditedTest(prev => ({ ...prev, so2Residuals: undefined }));
                 } else {
+                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1107,13 +1142,13 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 15.5 o 15,5"
+              placeholder="Ej: 15.5 o N/A"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF *</Label>
+            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF (números o N/A)</Label>
             <Input 
               id="so2Bf" 
               type="text"
@@ -1123,10 +1158,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2BfText(value);
                 
-                // Convertir a número cuando sea posible (sin bloquear la escritura)
-                if (value === '') {
+                // Si es "N/A" o texto, mantener como undefined en editedTest
+                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
                   setEditedTest(prev => ({ ...prev, so2Bf: undefined }));
                 } else {
+                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1134,7 +1170,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 12.3 o 12,3"
+              placeholder="Ej: 12.3 o N/A"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />
