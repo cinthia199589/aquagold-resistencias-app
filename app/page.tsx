@@ -1028,9 +1028,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       </CardHeader>
       <CardContent>
         {/* Campos básicos editables */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="space-y-2">
-            <Label htmlFor="lotNumber" className="font-semibold">Número de Lote *</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4 p-2 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="space-y-1">
+            <Label htmlFor="lotNumber" className="font-semibold text-xs sm:text-sm">Número de Lote *</Label>
             <Input 
               id="lotNumber" 
               value={editedTest.lotNumber}
@@ -1039,8 +1039,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               className="h-11"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="provider" className="font-semibold">Proveedor *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="provider" className="font-semibold text-xs sm:text-sm">Proveedor *</Label>
             <Input 
               id="provider" 
               value={editedTest.provider}
@@ -1049,8 +1049,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               className="h-11"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="pool" className="font-semibold">Piscina *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="pool" className="font-semibold text-xs sm:text-sm">Piscina *</Label>
             <Input 
               id="pool" 
               value={editedTest.pool}
@@ -1059,8 +1059,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               className="h-11"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="responsable" className="font-semibold">Responsable QC *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="responsable" className="font-semibold text-xs sm:text-sm">Responsable QC *</Label>
             <Input 
               id="responsable" 
               value={editedTest.responsable}
@@ -1069,8 +1069,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               className="h-11"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="certificationType" className="font-semibold">Certificación *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="certificationType" className="font-semibold text-xs sm:text-sm">Certificación *</Label>
             <Select 
               id="certificationType" 
               value={editedTest.certificationType}
@@ -1085,9 +1085,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         </div>
 
         {/* Campos de SO2 editables */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <div className="space-y-2">
-            <Label htmlFor="so2Residuals" className="text-black font-semibold">Residual SO2 MW *</Label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="space-y-1">
+            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW *</Label>
             <Input 
               id="so2Residuals" 
               type="text"
@@ -1113,8 +1113,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               className="font-medium h-11"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="so2Bf" className="text-black font-semibold">Residual SO2 BF *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF *</Label>
             <Input 
               id="so2Bf" 
               type="text"
@@ -1142,20 +1142,42 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 w-full">
-          {(editedTest.samples || []).map(sample => (
-            <Card key={sample.id} className="w-full">
-              <CardHeader className="pb-2 p-4">
-                <CardTitle className="text-base">Hora: {formatTimeSlot(test.startTime, sample.timeSlot)}</CardTitle>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
+          {(editedTest.samples || []).map(sample => {
+            // Determinar si la muestra está completa
+            const isComplete = sample.rawUnits !== undefined && sample.rawUnits !== null && 
+                              sample.cookedUnits !== undefined && sample.cookedUnits !== null && 
+                              sample.photoUrl && sample.photoUrl.trim() !== '';
+            
+            return (
+            <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all rounded-lg ${
+              isComplete 
+                ? 'border-green-400 dark:border-green-500' 
+                : 'border-amber-300 dark:border-amber-500'
+            }`}>
+              <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg bg-gradient-to-r ${
+                isComplete 
+                  ? 'from-green-500 to-green-600 dark:from-green-600 dark:to-green-700' 
+                  : 'from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white font-semibold text-xs sm:text-base">
+                    🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
+                  </CardTitle>
+                  <span className="text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full text-white font-medium">
+                    {isComplete ? '✓ Listo' : 'Pendiente'}
+                  </span>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4 p-4">
-                <div className="space-y-2">
+              <CardContent className="space-y-2 pt-2 p-2 sm:p-3">
+                {/* Sección Unidades */}
+                <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor={`raw-${sample.id}`} className="text-sm font-medium">Unidades Crudo</Label>
+                    <Label htmlFor={`raw-${sample.id}`} className="text-xs sm:text-sm font-medium">Unidades Crudo</Label>
                     {sample.rawUnits !== undefined && sample.rawUnits !== null ? (
-                      <span className="text-green-500 font-bold text-lg">✓</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
                     ) : (
-                      <span className="text-yellow-500 font-bold text-lg">⏳</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
                     )}
                   </div>
                   <Input 
@@ -1192,16 +1214,16 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     }}
                     placeholder="0-20"
                     disabled={editedTest.isCompleted}
-                    className="h-11 text-base"
+                    className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor={`cooked-${sample.id}`} className="text-sm font-medium">Unidades Cocido</Label>
+                    <Label htmlFor={`cooked-${sample.id}`} className="text-xs sm:text-sm font-medium">Unidades Cocido</Label>
                     {sample.cookedUnits !== undefined && sample.cookedUnits !== null ? (
-                      <span className="text-green-500 font-bold text-lg">✓</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
                     ) : (
-                      <span className="text-yellow-500 font-bold text-lg">⏳</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
                     )}
                   </div>
                   <Input 
@@ -1238,16 +1260,18 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     }}
                     placeholder="0-20"
                     disabled={editedTest.isCompleted}
-                    className="h-11 text-base"
+                    className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
-                <div className="space-y-3">
+                {/* Separador eliminado para spacing limpio */}
+                {/* Sección Foto */}
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Foto</span>
+                    <span className="text-xs sm:text-sm font-medium">Foto</span>
                     {sample.photoUrl && sample.photoUrl.trim() !== '' ? (
-                      <span className="text-green-500 font-bold text-lg">✓</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
                     ) : (
-                      <span className="text-yellow-500 font-bold text-lg">⏳</span>
+                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
                     )}
                   </div>
                   {/* Input para cámara */}
@@ -1277,30 +1301,28 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   />
                   <div className="flex gap-2">
                     <Button 
-                      variant="outline" 
-                      className={`flex-1 gap-2 h-11 text-sm font-medium ${uploadingPhotos.has(sample.id) ? 'bg-blue-50 border-blue-300' : ''}`}
+                      className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-camera-${sample.id}`)?.click()}
                       disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
                     >
                       {uploadingPhotos.has(sample.id) ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-                          <span>Subiendo...</span>
+                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                          <span className="text-[10px] sm:text-xs">Subiendo...</span>
                         </>
                       ) : (
                         <>
-                          <Camera size={16} />
+                          <Camera size={14} className="sm:w-4 sm:h-4" />
                           <span>Cámara</span>
                         </>
                       )}
                     </Button>
                     <Button 
-                      variant="outline" 
-                      className="flex-1 gap-2 h-11 text-sm font-medium"
+                      className="flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm border-0 transition-all"
                       onClick={() => document.getElementById(`photo-gallery-${sample.id}`)?.click()}
                       disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4">
                         <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
                         <circle cx="9" cy="9" r="2"/>
                         <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
@@ -1312,18 +1334,21 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   {sample.photoUrl && (
                     <div className="space-y-1 sm:space-y-2">
                       {/* Vista previa de la imagen */}
-                      <div className="relative w-full h-28 sm:h-32 bg-gray-100 rounded-lg overflow-hidden border">
+                      <div className="relative group w-full h-20 sm:h-24 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                         <img 
                           src={sample.photoUrl} 
                           alt={`Foto muestra ${formatTimeSlot(test.startTime, sample.timeSlot)}`}
-                          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
-                          onClick={() => window.open(sample.photoUrl, '_blank')}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
                             target.nextElementSibling?.classList.remove('hidden');
                           }}
                         />
+                        {/* Badge de completado */}
+                        <div className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-md">
+                          ✓
+                        </div>
                         {/* Fallback si la imagen no carga */}
                         <div className="hidden absolute inset-0 flex items-center justify-center bg-gray-200">
                           <div className="text-center text-gray-500">
@@ -1333,58 +1358,37 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                         </div>
                         {/* Overlay con botones */}
                         <div className="absolute top-2 right-2 flex gap-1">
-                          {/* Ícono de lupa removido - usar solo botón VER */}
                         </div>
                       </div>
                       
-                      {/* Botones de acción */}
-                      <div className="flex gap-2">
+                      {/* Botón de descarga compacto */}
+                      <a 
+                        href={sample.photoUrl} 
+                        download={`${test.lotNumber}-${formatTimeSlot(test.startTime, sample.timeSlot)}.jpg`}
+                        className="block"
+                      >
                         <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="flex-1 gap-1 text-xs border-2 border-white text-white bg-transparent hover:bg-white hover:text-gray-900"
-                          onClick={() => window.open(sample.photoUrl, '_blank')}
+                          className="w-full h-7 gap-1 text-[10px] sm:text-xs bg-gray-700 hover:bg-gray-800 text-white rounded-lg shadow-sm border-0 transition-all font-medium"
                         >
-                          �️ Ver
+                          ⬇️ Descargar
                         </Button>
-                        <a 
-                          href={sample.photoUrl} 
-                          download={`${test.lotNumber}-${formatTimeSlot(test.startTime, sample.timeSlot)}.jpg`}
-                          className="flex-1"
-                        >
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            className="w-full gap-1 text-xs border-2 border-white text-white bg-transparent hover:bg-white hover:text-gray-900"
-                          >
-                            ⬇️ Descargar
-                          </Button>
-                        </a>
-                      </div>
-                      
-                      {/* Indicador de estado */}
-                      <div className="text-center">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✅ Foto cargada
-                        </span>
-                      </div>
+                      </a>
                     </div>
                   )}
                   
                   {!sample.photoUrl && (
-                    <div className="text-center py-4">
-                      <div className="w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center">
-                        <div className="text-gray-400">
-                          <Camera size={24} className="mx-auto mb-1" />
-                          <p className="text-xs">Sin foto</p>
-                        </div>
+                    <div className="w-full h-16 sm:h-20 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                      <div className="text-gray-400 text-center">
+                        <Camera size={20} className="mx-auto mb-1" />
+                        <p className="text-[10px] sm:text-xs font-medium">Sin foto</p>
                       </div>
                     </div>
                   )}
                 </div>
               </CardContent>
             </Card>
-          ))}
+          );
+          })}
         </div>
 
         <div className="space-y-2">
@@ -2024,5 +2028,11 @@ const App = () => {
 };
 
 export default App;
+
+
+
+
+
+
 
 
