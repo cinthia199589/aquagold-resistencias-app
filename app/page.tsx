@@ -1299,7 +1299,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     }}
                     disabled={editedTest.isCompleted}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex flex-row gap-2 w-full">
                     <Button 
                       className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-camera-${sample.id}`)?.click()}
