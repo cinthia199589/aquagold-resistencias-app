@@ -150,19 +150,19 @@ const useMsalInstance = () => {
 
 // UI Components
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => 
-  <div className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-md ${className}`}>{children}</div>;
+  <div className={`bg-white dark:bg-slate-800 border-2 rounded-lg shadow-sm hover:shadow-md transition-all ${className}`}>{children}</div>;
 
 const CardHeader = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => 
-  <div className={`p-6 ${className}`}>{children}</div>;
+  <div className={`p-4 sm:p-6 ${className}`}>{children}</div>;
 
 const CardTitle = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => 
-  <h2 className={`text-2xl font-bold text-gray-900 dark:text-white ${className}`}>{children}</h2>;
+  <h2 className={`text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white ${className}`}>{children}</h2>;
 
 const CardDescription = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => 
-  <p className={`text-sm text-gray-500 dark:text-gray-400 ${className}`}>{children}</p>;
+  <p className={`text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 ${className}`}>{children}</p>;
 
 const CardContent = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => 
-  <div className={`p-6 pt-0 ${className}`}>{children}</div>;
+  <div className={`p-4 sm:p-6 pt-0 ${className}`}>{children}</div>;
 
 interface ButtonProps { 
   children: React.ReactNode; 
@@ -175,16 +175,16 @@ interface ButtonProps {
 }
 
 const Button = ({ children, onClick, className = '', variant = 'default', type = 'button', disabled = false, size = 'md' }: ButtonProps) => {
-  const baseClasses = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors";
+  const baseClasses = "inline-flex items-center justify-center rounded-lg text-xs sm:text-sm font-medium transition-all shadow-sm";
   const sizeClasses = {
     sm: "h-8 px-3 py-1.5 text-xs",
-    md: "h-10 px-4 py-2",
-    lg: "h-12 px-6 py-3 text-base"
+    md: "h-9 sm:h-10 px-4 py-2",
+    lg: "h-11 sm:h-12 px-6 py-3 text-sm sm:text-base"
   };
   const variantClasses = {
-    default: "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50",
-    ghost: "text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800",
-    outline: "border border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+    default: "bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 border-0",
+    ghost: "text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 border-0",
+    outline: "border-2 border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
   };
   
   const sizeClass = typeof size === 'string' && size in sizeClasses ? sizeClasses[size as keyof typeof sizeClasses] : sizeClasses.md;
@@ -199,13 +199,13 @@ const Progress = ({ value }: { value: number }) => (
 );
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => 
-  <input {...props} className="flex h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700" />;
+  <input {...props} className="flex h-8 sm:h-10 w-full rounded-lg border-2 border-gray-300 bg-white text-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white shadow-sm transition-all placeholder:text-gray-400" />;
 
 const Label = (props: React.LabelHTMLAttributes<HTMLLabelElement>) => 
-  <label {...props} className={`text-sm font-medium leading-none text-gray-900 dark:text-gray-100 ${props.className || ''}`} />;
+  <label {...props} className={`text-xs sm:text-sm font-medium leading-tight text-gray-700 dark:text-gray-300 ${props.className || ''}`} />;
 
 const Select = ({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { children: React.ReactNode }) => 
-  <select {...props} className="flex h-10 w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700">{children}</select>;
+  <select {...props} className="flex h-8 sm:h-10 w-full items-center justify-between rounded-lg border-2 border-gray-300 bg-white text-gray-900 px-3 py-2 text-xs sm:text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white shadow-sm transition-all">{children}</select>;
 
 const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => 
   <textarea {...props} className="flex min-h-[80px] w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700" />;
