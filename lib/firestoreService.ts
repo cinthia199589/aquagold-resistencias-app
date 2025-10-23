@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { ResistanceTest } from './types';
+import { saveTestBackupJSON, loadTestFromJSON } from './graphService';
 import { 
   saveTestLocally, 
   markPendingSync, 
@@ -681,49 +682,109 @@ export const loadTestsHybridDual = async (
   instance: any,
   scopes: string[]
 ): Promise<ResistanceTest[]> => {
-  log.info('🔄 Cargando tests DIRECTAMENTE desde Firestore...');
+  log.info('🔄 Cargando tests desde Firebase con respaldos en OneDrive...');
   
   try {
-    // SOLUCIÓN SIMPLE: Cargar TODO desde Firestore
-    // (Firestore tiene testType correcto después de la migración)
+    // 1. Cargar TODOS los tests desde Firebase (source of truth)
     const testsRef = collection(db, 'resistance_tests');
     const testsSnapshot = await getDocs(
       query(testsRef, orderBy('date', 'desc'))
     );
     
     if (testsSnapshot.size === 0) {
-      log.info('No hay tests en Firestore');
+      log.info('No hay tests en Firebase');
       return [];
     }
     
-    log.success(`${testsSnapshot.size} tests encontrados en Firestore`);
+    log.success(`${testsSnapshot.size} tests encontrados en Firebase`);
     
     const allTests = testsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as ResistanceTest[];
     
-    // Verificar que tienen testType
+    // 2. Verificar que tienen testType
     const withTestType = allTests.filter(t => t.testType);
     const withoutTestType = allTests.filter(t => !t.testType);
     
     log.success(`✅ ${withTestType.length} tests con testType`);
     if (withoutTestType.length > 0) {
-      log.info(`⚠️ ${withoutTestType.length} tests sin testType (se ignorarán en filtros)`);
+      log.info(`⚠️ ${withoutTestType.length} tests sin testType`);
     }
     
-    // Guardar en cache para uso offline
+    // 3. Guardar en cache para uso offline
     await saveTestsBatch(allTests);
     log.success(`💾 ${allTests.length} tests guardados en cache local`);
+    
+    // 4. OPTIMIZACIÓN: Guardar automáticamente JSON faltantes en background
+    // (No bloquea el flujo principal, solo crea los JSON que falten)
+    if (instance && withTestType.length > 0) {
+      log.info(`🔄 Verificando JSON faltantes en OneDrive...`);
+      // Ejecutar en background sin await
+      createMissingJSONBackups(instance, scopes, withTestType).catch(err => {
+        log.warn(`⚠️ Error creando JSON faltantes:`, err);
+      });
+    }
     
     return allTests;
     
   } catch (error) {
     log.error('❌ Error en carga dual:', error);
     
-    // FALLBACK: Cargar solo desde legacy (sistema actual)
-    log.warn('⚠️ Fallback a sistema legacy');
-    return loadTestsLegacy();
+    // FALLBACK: Cargar solo desde cache local
+    log.warn('⚠️ Fallback a cache local');
+    return getAllTestsLocally();
+  }
+};
+
+/**
+ * Crea automáticamente los JSON que faltan en OneDrive (background)
+ * No bloquea - se ejecuta en segundo plano
+ */
+const createMissingJSONBackups = async (
+  instance: any,
+  scopes: string[],
+  tests: ResistanceTest[]
+): Promise<void> => {
+  log.info(`🔍 Verificando ${tests.length} tests para JSON faltantes...`);
+  
+  let created = 0;
+  for (const test of tests) {
+    try {
+      // Verificar si existe en índice
+      const indexRef = doc(db, 'test_index', test.id);
+      const indexDoc = await getDoc(indexRef);
+      
+      // Si NO está en índice o NO tiene jsonPath, crear JSON
+      if (!indexDoc.exists() || !indexDoc.data()?.jsonPath) {
+        log.info(`📝 Creando JSON faltante para: ${test.lotNumber}`);
+        
+        const jsonResult = await saveTestBackupJSON(instance, scopes, test);
+        
+        if (jsonResult.success) {
+          // Crear/actualizar índice
+          await setDoc(indexRef, {
+            id: test.id,
+            lotNumber: test.lotNumber,
+            date: test.date,
+            testType: test.testType,
+            isCompleted: test.isCompleted,
+            jsonPath: jsonResult.jsonPath,
+            updatedAt: Timestamp.now(),
+            savedToOneDrive: true
+          }, { merge: true });
+          
+          created++;
+        }
+      }
+    } catch (error: any) {
+      log.warn(`⚠️ Error procesando ${test.lotNumber}:`, error.message);
+      // Continuar con siguientes
+    }
+  }
+  
+  if (created > 0) {
+    log.success(`✅ ${created} JSON faltantes creados automáticamente`);
   }
 };
 
@@ -735,6 +796,102 @@ const loadTestsLegacy = async (): Promise<ResistanceTest[]> => {
   const legacyRef = collection(db, COLLECTIONS.LEGACY);
   const snapshot = await getDocs(query(legacyRef, orderBy('date', 'desc')));
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ResistanceTest));
+};
+
+/**
+ * Carga un test individual desde el índice híbrido
+ * Estrategia de fallback:
+ * 1. Busca en índice
+ * 2. Si hay ruta JSON, intenta cargar desde OneDrive
+ * 3. Si NO hay JSON o falla, carga desde Firebase
+ * 4. Si carga desde Firebase, GUARDA AUTOMÁTICAMENTE el JSON que faltaba
+ */
+export const loadTestFromIndex = async (
+  instance: any,
+  scopes: string[],
+  testId: string
+): Promise<ResistanceTest | null> => {
+  try {
+    log.info(`🔍 Buscando test ${testId} en índice híbrido...`);
+    
+    // 1. Buscar en índice
+    const indexRef = doc(db, 'test_index', testId);
+    const indexDoc = await getDoc(indexRef);
+    
+    let testData: ResistanceTest | null = null;
+    let loadedFromJSON = false;
+    
+    // 2a. Si existe en índice e indica que hay JSON
+    if (indexDoc.exists()) {
+      const indexData = indexDoc.data();
+      log.success(`✅ Test encontrado en índice`);
+      
+      if (indexData?.jsonPath && indexData?.savedToOneDrive) {
+        try {
+          log.info(`📖 Intentando cargar desde JSON: ${indexData.jsonPath}`);
+          testData = await loadTestFromJSON(instance, scopes, indexData.jsonPath);
+          loadedFromJSON = true;
+          log.success(`✅ Test cargado desde JSON en OneDrive`);
+        } catch (error: any) {
+          log.warn(`⚠️ JSON no disponible o corrupto, usando Firebase:`, error.message);
+          testData = null; // Forzar cargar desde Firebase
+        }
+      }
+    }
+    
+    // 2b. Si NO cargó desde JSON, cargar desde Firebase
+    if (!testData) {
+      log.info(`📊 Cargando desde Firebase...`);
+      const testRef = doc(db, 'resistance_tests', testId);
+      const testDoc = await getDoc(testRef);
+      
+      if (testDoc.exists()) {
+        testData = { id: testDoc.id, ...testDoc.data() } as ResistanceTest;
+        log.success(`✅ Test cargado desde Firebase`);
+        
+        // 3. Si cargó desde Firebase pero NO tenía JSON, GUARDAR JSON AUTOMÁTICAMENTE
+        if (!loadedFromJSON && instance) {
+          try {
+            log.info(`💾 Guardando JSON que faltaba en OneDrive...`);
+            const jsonResult = await saveTestBackupJSON(instance, scopes, testData);
+            
+            if (jsonResult.success) {
+              // Actualizar índice con la nueva ruta JSON
+              const indexRef = doc(db, 'test_index', testId);
+              await setDoc(indexRef, {
+                id: testData.id,
+                lotNumber: testData.lotNumber,
+                date: testData.date,
+                testType: testData.testType,
+                isCompleted: testData.isCompleted,
+                jsonPath: jsonResult.jsonPath,
+                updatedAt: Timestamp.now(),
+                savedToOneDrive: true
+              }, { merge: true });
+              
+              log.success(`✅ JSON guardado y índice actualizado`);
+            }
+          } catch (error: any) {
+            log.warn(`⚠️ No se pudo guardar JSON (pero Firebase tiene los datos):`, error.message);
+            // No es crítico - Firebase tiene los datos
+          }
+        }
+      }
+    }
+    
+    // 4. Guardar en cache local (siempre)
+    if (testData) {
+      await saveTestLocally(testData);
+      return testData;
+    }
+    
+    log.warn(`⚠️ Test ${testId} no encontrado en ningún lado`);
+    return null;
+    
+  } catch (error: any) {
+    log.error(`❌ Error cargando test desde índice:`, error);
+    return null;
+  }
 };
 
 /**
@@ -788,35 +945,37 @@ export const saveTestHybridDual = async (
     result.success = false; // Critical: Legacy es obligatorio
   }
   
-  // 3. GUARDAR EN SISTEMA HÍBRIDO (Nuevo) - Solo si está activo
-  if (shouldUseDualWrite()) {
-    try {
-      // 3a. Subir datos completos a OneDrive
-      log.info('☁️ Subiendo a OneDrive...');
-      const oneDrivePath = await uploadTestToOneDrive(instance, scopes, test);
-      log.success(`Subido a OneDrive: ${oneDrivePath}`);
+  // 3. GUARDAR EN SISTEMA HÍBRIDO (Nuevo) - JSON en OneDrive + Índice en Firebase
+  try {
+    // 3a. Guardar JSON de respaldo en OneDrive (estructura MP/PT/mes)
+    log.info('💾 Guardando JSON de respaldo en OneDrive...');
+    const jsonResult = await saveTestBackupJSON(instance, scopes, test);
+    
+    if (jsonResult.success) {
+      log.success(`✅ JSON guardado: ${jsonResult.jsonPath}`);
       
-      // 3b. Crear/actualizar índice en Firebase
-      const checksum = generateChecksum(test);
-      const indexRef = doc(db, COLLECTIONS.INDEX, test.id);
+      // 3b. Crear/actualizar índice en Firebase que apunta al JSON
+      const indexRef = doc(db, 'test_index', test.id);
       await setDoc(indexRef, {
         id: test.id,
         lotNumber: test.lotNumber,
         date: test.date,
+        testType: test.testType,
         isCompleted: test.isCompleted,
+        jsonPath: jsonResult.jsonPath,
         updatedAt: Timestamp.now(),
-        oneDrivePath,
-        migratedAt: Timestamp.now(),
-        legacyChecksum: checksum
-      });
-      result.savedToHybrid = true;
-      log.success('Índice híbrido actualizado');
+        savedToOneDrive: true
+      }, { merge: true });
       
-    } catch (error: any) {
-      result.errors.push(`Híbrido: ${error.message}`);
-      log.warn('⚠️ Error en sistema híbrido (legacy tiene los datos):', error);
-      // NO marcar como error crítico: legacy ya tiene los datos
+      result.savedToHybrid = true;
+      log.success('✅ Índice híbrido actualizado en Firebase');
+    } else {
+      log.warn('⚠️ No se pudo guardar JSON en OneDrive (pero Firebase tiene los datos)');
     }
+  } catch (error: any) {
+    result.errors.push(`Híbrido/JSON: ${error.message}`);
+    log.warn('⚠️ Error guardando JSON: ', error);
+    // NO es crítico: Firebase tiene los datos en legacy
   }
   
   // Log resumen

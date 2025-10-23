@@ -359,7 +359,7 @@ const ResistanceTestList = ({
               <p className="text-gray-500">Cargando resistencias...</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2 lg:space-y-0">
               {tests.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No se encontraron resistencias en progreso.</p>
@@ -367,78 +367,80 @@ const ResistanceTestList = ({
               ) : (
                 <>
                   {/* ✅ Mostrar indicador de cantidad */}
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-3 lg:mb-2">
                     Mostrando {Math.min(visibleCount, tests.length)} de {tests.length} resistencias
                   </div>
                   
-                  {/* ✅ Infinite scroll - Solo mostrar tests visibles */}
-                  {tests.slice(0, visibleCount).map(test => (
-                <div 
-                  key={test.id} 
-                  className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
-                >
-                  <div onClick={() => setRoute('test-detail', { id: test.id })}>
-                    {/* Header responsive - Compacto */}
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1">
-                        <div className="font-medium text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
-                          Lote: {test.lotNumber}
+                  {/* ✅ GRID RESPONSIVE: Mostrar en columnas en desktop, filas en mobile */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 lg:gap-2">
+                    {tests.slice(0, visibleCount).map(test => (
+                      <div 
+                        key={test.id} 
+                        className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
+                      >
+                        <div onClick={() => setRoute('test-detail', { id: test.id })}>
+                          {/* Header responsive - Compacto */}
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
+                                Lote: {test.lotNumber}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-700 dark:text-gray-300 self-start sm:self-center">
+                              {formatDateLocal(test.date)}
+                            </div>
+                          </div>
+                          
+                          {/* Info responsive - Compacto */}
+                          <div className="text-xs text-gray-700 dark:text-gray-300 mt-1">
+                            <div className="flex flex-col sm:flex-row sm:gap-2">
+                              <span>Proveedor: <strong>{test.provider}</strong></span>
+                              <span>Piscina: <strong>{test.pool}</strong></span>
+                            </div>
+                          </div>
+                          
+                          {/* Progress bar responsive - Compacto */}
+                          <div className="mt-1">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Progreso</span>
+                              <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{Math.round(calculateProgress(test))}%</span>
+                            </div>
+                            <Progress value={calculateProgress(test)} />
+                            
+                            {/* Indicadores de muestras por hora */}
+                            <div className="samples-indicator">
+                              {(test.samples || []).map((sample) => {
+                                const isComplete = sample.photoUrl && sample.photoUrl.trim() !== '' && 
+                                                 sample.rawUnits !== undefined && sample.rawUnits !== null &&
+                                                 sample.cookedUnits !== undefined && sample.cookedUnits !== null;
+                                const isPending = !isComplete;
+                                return (
+                                  <div 
+                                    key={sample.id}
+                                    className={`sample-indicator ${isComplete ? 'completed' : 'pending'}`}
+                                    title={`Hora ${formatTimeSlot ? formatTimeSlot(test.startTime, sample.timeSlot) : sample.timeSlot}: ${isComplete ? '✓ Completo' : '⏳ Pendiente'}`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-xs text-gray-700 dark:text-gray-300 self-start sm:self-center">
-                        {formatDateLocal(test.date)}
-                      </div>
-                    </div>
-                    
-                    {/* Info responsive - Compacto */}
-                    <div className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                      <div className="flex flex-col sm:flex-row sm:gap-2">
-                        <span>Proveedor: <strong>{test.provider}</strong></span>
-                        <span>Piscina: <strong>{test.pool}</strong></span>
-                      </div>
-                    </div>
-                    
-                    {/* Progress bar responsive - Compacto */}
-                    <div className="mt-1">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Progreso</span>
-                        <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{Math.round(calculateProgress(test))}%</span>
-                      </div>
-                      <Progress value={calculateProgress(test)} />
-                      
-                      {/* Indicadores de muestras por hora */}
-                      <div className="samples-indicator">
-                        {(test.samples || []).map((sample) => {
-                          const isComplete = sample.photoUrl && sample.photoUrl.trim() !== '' && 
-                                           sample.rawUnits !== undefined && sample.rawUnits !== null &&
-                                           sample.cookedUnits !== undefined && sample.cookedUnits !== null;
-                          const isPending = !isComplete;
-                          return (
-                            <div 
-                              key={sample.id}
-                              className={`sample-indicator ${isComplete ? 'completed' : 'pending'}`}
-                              title={`Hora ${formatTimeSlot ? formatTimeSlot(test.startTime, sample.timeSlot) : sample.timeSlot}: ${isComplete ? '✓ Completo' : '⏳ Pendiente'}`}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              ))}
               
-              {/* ✅ Botón "Cargar más" si hay más tests */}
-              {visibleCount < tests.length && (
-                <div className="flex justify-center mt-8 mb-4">
-                  <Button 
-                    onClick={loadMoreTests}
-                    className="w-full sm:w-auto gap-2 py-3 px-6 text-base font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg rounded-lg border-2 border-blue-500"
-                  >
-                    ⬇️ Cargar {tests.length - visibleCount} más ({tests.length - visibleCount} {tests.length - visibleCount === 1 ? 'test' : 'tests'} restantes)
-                  </Button>
-                </div>
-              )}
-            </>
+                  {/* ✅ Botón "Cargar más" si hay más tests */}
+                  {visibleCount < tests.length && (
+                    <div className="flex justify-center mt-8 mb-4">
+                      <Button 
+                        onClick={loadMoreTests}
+                        className="w-full sm:w-auto gap-2 py-3 px-6 text-base font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg rounded-lg border-2 border-blue-500"
+                      >
+                        ⬇️ Cargar {tests.length - visibleCount} más ({tests.length - visibleCount} {tests.length - visibleCount === 1 ? 'test' : 'tests'} restantes)
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -769,15 +771,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Subir SOLO a OneDrive (esto eliminará la anterior y subirá la nueva)
       const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file, editedTest.testType);
       
-      // ✨ FASE 1 FIX: Verificar que la URL es válida antes de guardar
-      console.log(`🔍 Verificando que la URL es válida...`);
-      if (!photoUrl || photoUrl.trim() === '') {
-        throw new Error("La foto se subió pero no se generó una URL válida");
-      }
-      
-      console.log(`✅ Foto subida exitosamente a OneDrive`);
-      console.log(`   URL: ${photoUrl}`);
-      
       // Actualizar con URL real y limpiar estado de carga
       const updatedTest = {
         ...editedTest,
@@ -786,19 +779,15 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       setEditedTest(updatedTest);
       
-      // 🔥 AUTO-GUARDAR: Guardar foto en Firestore inmediatamente
-      console.log(`💾 Guardando URL de foto en Firestore...`);
+      // 🔥 AUTO-GUARDAR con sistema dual inmediatamente después de subir foto
       try {
         if (saveTestFn) {
           await saveTestFn(updatedTest);
         } else {
           await saveTestToFirestore(updatedTest);
         }
-        console.log(`✅ Foto guardada exitosamente en Firestore`);
       } catch (saveError: any) {
-        console.error(`⚠️ Error al guardar foto en Firestore:`, saveError);
         // No mostrar error al usuario para no interrumpir el flujo
-        // La foto está en OneDrive, solo no se guardó la referencia
       }
       
       // Limpiar URL temporal
@@ -806,9 +795,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       // Mostrar notificación exitosa
     } catch (error: any) {
-      console.error(`❌ Error FINAL al subir foto:`, error);
       
-      // ✨ FASE 1 FIX: NO guardar URL inválida en Firestore
       // Limpiar estado de carga en caso de error
       setEditedTest(prev => ({
         ...prev,
@@ -820,8 +807,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         alert("❌ Sesión expirada. Por favor, recarga la página para volver a iniciar sesión.");
       } else if (error.message.includes("MSAL no está disponible")) {
         alert("❌ Error de autenticación. Por favor, recarga la página.");
-      } else if (error.message.includes("carpetas")) {
-        alert("❌ Error al crear las carpetas necesarias en OneDrive. Verifica permisos.");
       } else {
         alert(`❌ Error al subir foto: ${error.message}`);
       }
@@ -1098,29 +1083,12 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               <option value="CONVENCIONAL">CONVENCIONAL</option>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="startTime" className="font-semibold text-xs sm:text-sm">🕐 Hora de Inicio *</Label>
-            <Input 
-              id="startTime" 
-              type="time"
-              value={editedTest.startTime}
-              onChange={(e) => {
-                const newTime = e.target.value;
-                if (newTime && /^\d{2}:\d{2}$/.test(newTime)) {
-                  setEditedTest(prev => ({ ...prev, startTime: newTime }));
-                }
-              }}
-              disabled={editedTest.isCompleted}
-              className="h-11 font-semibold"
-              title="Ajusta la hora de inicio si se ingresó incorrectamente"
-            />
-          </div>
         </div>
 
-        {/* Campos de SO2 editables - Permite números o texto (ej: N/A) */}
+        {/* Campos de SO2 editables */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="space-y-1">
-            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW (números o N/A)</Label>
+            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW *</Label>
             <Input 
               id="so2Residuals" 
               type="text"
@@ -1130,11 +1098,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2ResidualsText(value);
                 
-                // Si es "N/A" o texto, mantener como undefined en editedTest
-                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
+                // Convertir a número cuando sea posible (sin bloquear la escritura)
+                if (value === '') {
                   setEditedTest(prev => ({ ...prev, so2Residuals: undefined }));
                 } else {
-                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1142,13 +1109,13 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 15.5 o N/A"
+              placeholder="Ej: 15.5 o 15,5"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF (números o N/A)</Label>
+            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF *</Label>
             <Input 
               id="so2Bf" 
               type="text"
@@ -1158,11 +1125,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2BfText(value);
                 
-                // Si es "N/A" o texto, mantener como undefined en editedTest
-                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
+                // Convertir a número cuando sea posible (sin bloquear la escritura)
+                if (value === '') {
                   setEditedTest(prev => ({ ...prev, so2Bf: undefined }));
                 } else {
-                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1170,7 +1136,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 12.3 o N/A"
+              placeholder="Ej: 12.3 o 12,3"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />

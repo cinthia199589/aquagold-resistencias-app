@@ -6,9 +6,6 @@ const getOneDriveFolderByType = (testType: TestType): string => {
   return testType === 'MATERIA_PRIMA' ? 'Aquagold_MP' : 'Aquagold_PT';
 };
 
-// Mantener la constante antigua para compatibilidad (eliminar después de migración)
-const APP_ROOT_FOLDER = "Aquagold_Resistencias";
-
 const getGraphClient = async (msalInstance: IPublicClientApplication, scopes: string[]) => {
   // Verificar que la instancia MSAL esté disponible
   if (!msalInstance) {
@@ -74,30 +71,6 @@ const getGraphClient = async (msalInstance: IPublicClientApplication, scopes: st
       return {};
     }
   };
-};
-
-/**
- * Asegura que existe la carpeta raíz
- */
-export const ensureAppFolderExists = async (
-  msalInstance: IPublicClientApplication, 
-  scopes: string[]
-) => {
-  const callApi = await getGraphClient(msalInstance, scopes);
-  
-  try {
-    await callApi(`/me/drive/root:/${APP_ROOT_FOLDER}`);
-  } catch {
-    await callApi(
-      "/me/drive/root/children",
-      "POST",
-      JSON.stringify({
-        name: APP_ROOT_FOLDER,
-        folder: {},
-        "@microsoft.graph.conflictBehavior": "rename"
-      })
-    );
-  }
 };
 
 /**
@@ -190,6 +163,130 @@ export const saveExcelToOneDrive = async (
   } catch (error: any) {
     console.error(`❌ Error al guardar Excel:`, error);
     throw new Error(`Error al guardar Excel: ${error.message}`);
+  }
+};
+
+/**
+ * Guarda un respaldo JSON de la prueba en OneDrive
+ * Estructura: Aquagold_MP(o PT)/database/tests/2025-10/test-id.json
+ */
+export const saveTestBackupJSON = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  test: ResistanceTest
+): Promise<{ jsonPath: string; success: boolean }> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(test.testType);
+  const month = test.date.substring(0, 7); // "2025-10"
+  
+  try {
+    // 1. Asegurar que existe la estructura de carpetas
+    const databasePath = `${folderName}/database`;
+    const testsPath = `${databasePath}/tests`;
+    const monthPath = `${testsPath}/${month}`;
+    
+    // Crear carpeta "database" si no existe
+    try {
+      await callApi(`/me/drive/root:/${databasePath}`);
+    } catch {
+      console.log(`📁 Creando carpeta ${databasePath}...`);
+      await callApi(
+        `/me/drive/root:/${folderName}:/children`,
+        "POST",
+        JSON.stringify({
+          name: "database",
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        })
+      );
+    }
+    
+    // Crear carpeta "tests" si no existe
+    try {
+      await callApi(`/me/drive/root:/${testsPath}`);
+    } catch {
+      console.log(`📁 Creando carpeta tests...`);
+      await callApi(
+        `/me/drive/root:/${databasePath}:/children`,
+        "POST",
+        JSON.stringify({
+          name: "tests",
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        })
+      );
+    }
+    
+    // Crear carpeta del mes si no existe
+    try {
+      await callApi(`/me/drive/root:/${monthPath}`);
+    } catch {
+      console.log(`📁 Creando carpeta ${month}...`);
+      await callApi(
+        `/me/drive/root:/${testsPath}:/children`,
+        "POST",
+        JSON.stringify({
+          name: month,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        })
+      );
+    }
+    
+    // 2. Guardar el JSON con los datos actualizados
+    const fileName = `${test.id}.json`;
+    const jsonPath = `${monthPath}/${fileName}`;
+    const endpoint = `/me/drive/root:/${jsonPath}:/content`;
+    
+    // Crear contenido JSON con todos los datos actualizados
+    const jsonContent = JSON.stringify(test, null, 2);
+    
+    await callApi(endpoint, "PUT", jsonContent, "application/json");
+    
+    console.log(`✅ JSON de respaldo guardado: ${jsonPath}`);
+    
+    return {
+      jsonPath,
+      success: true
+    };
+  } catch (error: any) {
+    console.error(`❌ Error al guardar JSON de respaldo:`, error);
+    return {
+      jsonPath: "",
+      success: false
+    };
+  }
+};
+
+/**
+ * Lee un archivo JSON de respaldo desde OneDrive
+ * Usado para cargar datos desde el archivo JSON en lugar de Firebase
+ */
+export const loadTestFromJSON = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  jsonPath: string
+): Promise<any> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  
+  try {
+    console.log(`📖 Cargando JSON desde OneDrive: ${jsonPath}`);
+    
+    // Convertir ruta de OneDrive a endpoint de API
+    const endpoint = `/me/drive/root:/${jsonPath}:/content`;
+    
+    const response = await callApi(endpoint, "GET");
+    
+    if (!response || Object.keys(response).length === 0) {
+      throw new Error("JSON vacío en OneDrive");
+    }
+    
+    console.log(`✅ JSON cargado exitosamente desde: ${jsonPath}`);
+    return response;
+    
+  } catch (error: any) {
+    console.error(`❌ Error cargando JSON desde OneDrive:`, error);
+    throw new Error(`Error cargando JSON: ${error.message}`);
   }
 };
 
@@ -317,25 +414,47 @@ export const uploadPhotoToOneDrive = async (
 };
 
 /**
- * Genera y guarda el Excel de reporte diario
+ * Genera y guarda el Excel de reporte diario separado por tipo (MP y PT)
  */
 export const saveDailyReportToOneDrive = async (
   msalInstance: IPublicClientApplication,
   scopes: string[],
   date: string,
-  excelBlob: Blob
+  excelBlob: Blob,
+  testType: TestType
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
   
   try {
-    await ensureAppFolderExists(msalInstance, scopes);
+    // Asegurar que existe la carpeta del tipo
+    await ensureTypeFolderExists(msalInstance, scopes, testType);
     
-    const fileName = `Reporte_Diario_${date}.xlsx`;
-    const endpoint = `/me/drive/root:/${APP_ROOT_FOLDER}/${fileName}:/content`;
+    // Crear subcarpeta "reportes_diarios" si no existe
+    const reportsFolderPath = `${folderName}/reportes_diarios`;
+    try {
+      await callApi(`/me/drive/root:/${reportsFolderPath}`);
+      console.log(`✅ Carpeta ${reportsFolderPath} existe`);
+    } catch {
+      console.log(`📁 Creando carpeta ${reportsFolderPath}...`);
+      await callApi(
+        `/me/drive/root:/${folderName}:/children`,
+        "POST",
+        JSON.stringify({
+          name: "reportes_diarios",
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        })
+      );
+    }
+    
+    const typeLabel = testType === 'MATERIA_PRIMA' ? 'MP' : 'PT';
+    const fileName = `Reporte_Diario_${typeLabel}_${date}.xlsx`;
+    const endpoint = `/me/drive/root:/${reportsFolderPath}/${fileName}:/content`;
     
     await callApi(endpoint, "PUT", excelBlob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     
-    console.log(`✅ Reporte diario guardado: ${fileName}`);
+    console.log(`✅ Reporte diario guardado en ${reportsFolderPath}: ${fileName}`);
     return endpoint;
   } catch (error: any) {
     console.error(`❌ Error al guardar reporte diario:`, error);

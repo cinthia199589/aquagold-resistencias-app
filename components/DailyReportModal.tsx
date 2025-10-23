@@ -61,9 +61,45 @@ const DailyReportModal: React.FC<DailyReportModalProps> = ({ isOpen, onClose }) 
     
     setIsLoading(true);
     try {
-      const blob = generateDailyReportBlob(reportData);
-      await saveDailyReportToOneDrive(instance, loginRequest.scopes, selectedDate, blob);
-      alert('✅ Reporte guardado en OneDrive exitosamente.');
+      // Separar tests por tipo
+      const mpTests = reportData.tests.filter(t => t.testType === 'MATERIA_PRIMA');
+      const ptTests = reportData.tests.filter(t => t.testType === 'PRODUCTO_TERMINADO');
+      
+      let savedCount = 0;
+      
+      // Guardar reporte de Materia Prima si hay tests
+      if (mpTests.length > 0) {
+        const mpReport: DailyReport = {
+          date: reportData.date,
+          tests: mpTests,
+          totalTests: mpTests.length,
+          completedTests: mpTests.filter(t => t.isCompleted).length
+        };
+        const mpBlob = generateDailyReportBlob(mpReport);
+        await saveDailyReportToOneDrive(instance, loginRequest.scopes, selectedDate, mpBlob, 'MATERIA_PRIMA');
+        savedCount++;
+      }
+      
+      // Guardar reporte de Producto Terminado si hay tests
+      if (ptTests.length > 0) {
+        const ptReport: DailyReport = {
+          date: reportData.date,
+          tests: ptTests,
+          totalTests: ptTests.length,
+          completedTests: ptTests.filter(t => t.isCompleted).length
+        };
+        const ptBlob = generateDailyReportBlob(ptReport);
+        await saveDailyReportToOneDrive(instance, loginRequest.scopes, selectedDate, ptBlob, 'PRODUCTO_TERMINADO');
+        savedCount++;
+      }
+      
+      if (savedCount === 0) {
+        alert('⚠️ No hay pruebas para guardar.');
+      } else if (savedCount === 1) {
+        alert('✅ Reporte guardado en OneDrive exitosamente.');
+      } else {
+        alert(`✅ ${savedCount} reportes guardados en OneDrive exitosamente (MP y PT).`);
+      }
     } catch (error: any) {
       alert(`❌ Error al guardar en OneDrive: ${error.message}`);
     } finally {
