@@ -14,6 +14,18 @@ const styles = {
     alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
     border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
   },
+  // Same as headerWhite but WITHOUT bottom border (useful to remove dividing line)
+  headerWhiteNoBottom: {
+    font: { bold: true, sz: 11 },
+    alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+    border: { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  },
+  // Same as headerWhite but WITHOUT top border (useful to remove dividing line)
+  headerWhiteNoTop: {
+    font: { bold: true, sz: 11 },
+    alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+    border: { bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  },
   labelBlueWithValue: {
     font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 10 },
     fill: { fgColor: { rgb: 'FF002060' } },
@@ -51,6 +63,16 @@ const styles = {
     alignment: { vertical: 'center', horizontal: 'center' },
     border: { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
   },
+  headerWhiteLeft: {
+    font: { bold: true, sz: 11 },
+    alignment: { vertical: 'center', horizontal: 'left', wrapText: true },
+    border: { top: { style: 'thin' }, bottom: { style: 'none' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  },
+  headerWhiteNoBorderTop: {
+    font: { bold: true, sz: 11 },
+    alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+    border: { top: { style: 'none' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  },
 };
 
 const createCell = (value: any, style: any = {}, type: 'n' | 's' = 's') => ({
@@ -82,21 +104,21 @@ export const generateExcelBlob = (test: ResistanceTest): Blob => {
   addStyledNulls(1, 8, 9, styles.headerWhite);
   ws_data[1][1] = createCell('KM 16.5 DURÁN – TAMBO\nLOTE DE TERRENO 002\nSECTOR DENOMINADO YAMILE', styles.headerBlue);
   ws_data[1][3] = createCell('CÓDIGO: FQC-LFQ-PDR-004', styles.headerWhite);
-  ws_data[1][8] = createCell('VERSIÓN: 01', styles.headerWhite);
+  ws_data[1][8] = createCell('VERSIÓN: 02', styles.headerWhite);
 
   addStyledNulls(2, 3, 7, styles.headerBlue);
   addStyledNulls(2, 8, 9, styles.headerBlue);
-  ws_data[2][3] = createCell(`FECHA: ${format(new Date(test.date), 'dd/MM/yyyy')}`, styles.headerBlue);
+  ws_data[2][3] = createCell('FECHA: 28/05/2025', styles.headerBlue);
   ws_data[2][8] = createCell('Página 1 de 1', styles.headerBlue);
 
   addStyledNulls(3, 1, 2, styles.headerWhite);
-  addStyledNulls(3, 3, 9, styles.headerWhite);
+  addStyledNulls(3, 3, 9, styles.headerWhiteNoBottom);
   ws_data[3][1] = createCell('FORMATO', styles.headerWhite);
-  ws_data[3][3] = createCell('NOMBRE DEL DOCUMENTO', styles.headerWhite);
+  ws_data[3][3] = createCell('NOMBRE DEL DOCUMENTO', styles.headerWhiteNoBottom);
 
   addStyledNulls(4, 1, 2, styles.headerWhite);
-  addStyledNulls(4, 3, 9, styles.headerWhite);
-  ws_data[4][3] = createCell('PRUEBA DE RESISTENCIA', styles.headerWhite);
+  addStyledNulls(4, 3, 9, styles.headerWhiteNoTop);
+  ws_data[4][3] = createCell('PRUEBA DE RESISTENCIA', styles.headerWhiteNoTop);
 
   // Contenido
   const contentStartRow = 6;
@@ -122,7 +144,8 @@ export const generateExcelBlob = (test: ResistanceTest): Blob => {
   ws_data[tableHeaderRow][contentStartCol + 1] = createCell('UNIDADES CRUDO', styles.labelBlueWithValue);
   ws_data[tableHeaderRow][contentStartCol + 2] = createCell('UNIDADES COCIDO', styles.labelBlueWithValue);
 
-  let totalRaw = 0, totalCooked = 0;
+  // Use last-sample values for totals (not sum)
+  let lastRaw = 0, lastCooked = 0;
   test.samples.forEach((sample, i) => {
     const slotDate = addHours(
       new Date(`${format(new Date(test.date), 'yyyy-MM-dd')}T${test.startTime}`),
@@ -131,14 +154,14 @@ export const generateExcelBlob = (test: ResistanceTest): Blob => {
     ws_data[tableHeaderRow + 1 + i][contentStartCol] = createCell(format(slotDate, 'HH:mm'), styles.value);
     ws_data[tableHeaderRow + 1 + i][contentStartCol + 1] = createCell(sample.rawUnits ?? '', styles.value, sample.rawUnits !== undefined ? 'n' : 's');
     ws_data[tableHeaderRow + 1 + i][contentStartCol + 2] = createCell(sample.cookedUnits ?? '', styles.value, sample.cookedUnits !== undefined ? 'n' : 's');
-    totalRaw += sample.rawUnits ?? 0;
-    totalCooked += sample.cookedUnits ?? 0;
+    if (typeof sample.rawUnits === 'number') lastRaw = sample.rawUnits;
+    if (typeof sample.cookedUnits === 'number') lastCooked = sample.cookedUnits;
   });
 
   const totalRow = tableHeaderRow + 1 + test.samples.length;
   ws_data[totalRow][contentStartCol] = createCell('TOTAL UNIDADES', styles.labelBlueWithValue);
-  ws_data[totalRow][contentStartCol + 1] = createCell(totalRaw, styles.value, 'n');
-  ws_data[totalRow][contentStartCol + 2] = createCell(totalCooked, styles.value, 'n');
+  ws_data[totalRow][contentStartCol + 1] = createCell(lastRaw, styles.value, 'n');
+  ws_data[totalRow][contentStartCol + 2] = createCell(lastCooked, styles.value, 'n');
 
   const obsRow = totalRow + 1;
   ws_data[obsRow][contentStartCol] = createCell('OBSERVACIONES', styles.labelBlueWithValue);
