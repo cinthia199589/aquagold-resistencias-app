@@ -314,12 +314,15 @@ const ensureLotFolderExists = async (
     } catch (e: any) {
       if (e.message?.includes("404") || e.message?.includes("itemNotFound")) {
         console.log(`📁 Creando carpeta raíz: ${folderName}`);
-        const createFolderBody = {
-          name: folderName,
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
-        };
-        await callApi(`/me/drive/root/children`, "POST", createFolderBody);
+        await callApi(
+          `/me/drive/root/children`,
+          "POST",
+          JSON.stringify({
+            name: folderName,
+            folder: {},
+            "@microsoft.graph.conflictBehavior": "rename"
+          })
+        );
         console.log(`✅ Carpeta raíz creada: ${folderName}`);
       } else {
         throw e;
@@ -335,12 +338,15 @@ const ensureLotFolderExists = async (
         console.log(`📁 Creando carpeta de lote: ${lotNumber}`);
         // Obtener ID de carpeta raíz
         const rootFolder = await callApi(`/me/drive/root:/${folderName}`, "GET");
-        const createFolderBody = {
-          name: lotNumber,
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
-        };
-        await callApi(`/me/drive/items/${rootFolder.id}/children`, "POST", createFolderBody);
+        await callApi(
+          `/me/drive/items/${rootFolder.id}/children`,
+          "POST",
+          JSON.stringify({
+            name: lotNumber,
+            folder: {},
+            "@microsoft.graph.conflictBehavior": "rename"
+          })
+        );
         console.log(`✅ Carpeta de lote creada: ${lotNumber}`);
       } else {
         throw e;
