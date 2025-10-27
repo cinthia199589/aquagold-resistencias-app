@@ -1083,12 +1083,29 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               <option value="CONVENCIONAL">CONVENCIONAL</option>
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="editStartTime" className="font-semibold text-xs sm:text-sm">🕐 Hora de Inicio *</Label>
+            <Input 
+              id="editStartTime" 
+              type="time"
+              value={editedTest.startTime}
+              onChange={(e) => {
+                const newTime = e.target.value;
+                if (newTime && /^\d{2}:\d{2}$/.test(newTime)) {
+                  setEditedTest(prev => ({ ...prev, startTime: newTime }));
+                }
+              }}
+              disabled={editedTest.isCompleted}
+              className="h-11 font-semibold"
+              title="Ajusta la hora de inicio si se ingresó incorrectamente. Los horarios de todas las muestras se actualizarán automáticamente."
+            />
+          </div>
         </div>
 
-        {/* Campos de SO2 editables */}
+        {/* Campos de SO2 editables - Permite números o texto (ej: N/A) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
           <div className="space-y-1">
-            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW *</Label>
+            <Label htmlFor="so2Residuals" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 MW (números o N/A)</Label>
             <Input 
               id="so2Residuals" 
               type="text"
@@ -1098,10 +1115,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2ResidualsText(value);
                 
-                // Convertir a número cuando sea posible (sin bloquear la escritura)
-                if (value === '') {
+                // Si es "N/A" o texto, mantener como undefined en editedTest
+                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
                   setEditedTest(prev => ({ ...prev, so2Residuals: undefined }));
                 } else {
+                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1109,13 +1127,13 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 15.5 o 15,5"
+              placeholder="Ej: 15.5 o N/A"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF *</Label>
+            <Label htmlFor="so2Bf" className="text-black font-semibold text-xs sm:text-sm">Residual SO2 BF (números o N/A)</Label>
             <Input 
               id="so2Bf" 
               type="text"
@@ -1125,10 +1143,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 const value = e.target.value;
                 setSo2BfText(value);
                 
-                // Convertir a número cuando sea posible (sin bloquear la escritura)
-                if (value === '') {
+                // Si es "N/A" o texto, mantener como undefined en editedTest
+                if (value === '' || value.toUpperCase() === 'N/A' || isNaN(parseFloat(value.replace(',', '.')))) {
                   setEditedTest(prev => ({ ...prev, so2Bf: undefined }));
                 } else {
+                  // Convertir a número cuando sea posible
                   const normalized = value.replace(',', '.');
                   const num = parseFloat(normalized);
                   if (!isNaN(num)) {
@@ -1136,7 +1155,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   }
                 }
               }}
-              placeholder="Ej: 12.3 o 12,3"
+              placeholder="Ej: 12.3 o N/A"
               disabled={editedTest.isCompleted}
               className="font-medium h-11"
             />
