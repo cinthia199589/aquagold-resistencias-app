@@ -234,6 +234,23 @@ export function initBackgroundSync(): void {
 }
 
 /**
+ * Remover operación específica de la cola
+ */
+export function removePendingOperation(operationId: string): void {
+  try {
+    const operations = getPendingOperations();
+    const filtered = operations.filter(op => op.id !== operationId);
+
+    if (filtered.length !== operations.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+      console.log(`🗑️ Operación ${operationId} removida de la cola`);
+    }
+  } catch (error) {
+    console.error('❌ Error removiendo operación:', error);
+  }
+}
+
+/**
  * Componente React para mostrar estado de sincronización
  */
 export function usePendingOperations() {

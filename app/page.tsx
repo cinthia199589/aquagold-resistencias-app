@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { MsalProvider, useMsal, MsalAuthenticationTemplate } from '@azure/msal-react';
 import { PublicClientApplication, InteractionType } from '@azure/msal-browser';
-import { Home, PlusCircle, LogOut, User, LogIn, ChevronLeft, Camera, Save, Download, FileText, CheckCircle, Trash2 } from 'lucide-react';
+import { Home, PlusCircle, LogOut, User, LogIn, ChevronLeft, Camera, Save, Download, FileText, CheckCircle, Trash2, Check, X } from 'lucide-react';
 import { 
   saveTestToFirestore, 
   getInProgressTests, 
@@ -21,13 +21,15 @@ import {
   saveExcelToOneDrive, 
   uploadPhotoToOneDrive 
 } from '../lib/graphService';
+import { uploadPhotoReliably, validateConnectivity } from '../lib/photoUploadService';
 import { exportToExcel, generateExcelBlob } from '../lib/excelExport';
 import { ResistanceTest, Sample, TestType } from '../lib/types';
 import SearchBar from '../components/SearchBar';
 import WorkModeSwitch from '../components/WorkModeSwitch';
-import { useAutoSave } from '../lib/useAutoSave';
+import { saveUnitsReliably, UnitSaveProgress } from '../lib/unitSaveService';
 import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
+import { useAutoSave } from '../lib/useAutoSave';
 import { useOnlineStatus, OfflineBanner } from '../lib/offlineDetector';
 import { migratePhotoUrls } from '../lib/migratePhotoUrls';
 
@@ -656,9 +658,17 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     itemName: ''
   });
 
-  // 🆕 AUTO-GUARDADO con hook profesional (2 segundos)
+  // 🆕 AUTO-GUARDADO HÍBRIDO - Funciona para todo excepto unidades (que se guardan manualmente)
   const { status: autoSaveStatus, markAsSaved } = useAutoSave({
-    data: editedTest,
+    data: {
+      ...editedTest,
+      // Excluir unidades del auto-guardado (se guardan manualmente con sistema confiable)
+      samples: editedTest.samples.map(s => ({
+        ...s,
+        rawUnits: undefined, // Excluido del auto-guardado
+        cookedUnits: undefined // Excluido del auto-guardado
+      }))
+    },
     onSave: async () => {
       if (saveTestFn) {
         await saveTestFn(editedTest);
@@ -667,7 +677,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       }
       onTestUpdated(); // Actualizar lista en dashboard
     },
-    delay: 2000, // 2 segundos
+    delay: 0, // Guardado inmediato después de cualquier cambio
     enabled: !test.isCompleted // Solo si NO está completada
   });
 
@@ -682,13 +692,42 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     }
   };
 
-  const handleSampleChange = (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
+  const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
+    // Actualizar estado local inmediatamente para feedback visual
     const updatedTest = {
       ...editedTest,
       samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, [field]: value } : s)
     };
     setEditedTest(updatedTest);
-    // El auto-guardado se encarga del resto (2 segundos)
+
+    // Usar servicio confiable para guardar
+    try {
+      const result = await saveUnitsReliably(
+        updatedTest,
+        [{ sampleId, field, value }],
+        {
+          maxRetries: 3,
+          enableLocalBackup: true,
+          validateChanges: true
+        },
+        (progress) => setUnitSaveProgress(progress)
+      );
+
+      if (result.success) {
+        // Actualizar lista en dashboard
+        onTestUpdated();
+        console.log(`✅ Unidad ${field} guardada exitosamente para muestra ${sampleId}`);
+      } else {
+        console.error('❌ Error al guardar unidad:', result.errors);
+        // Aquí podríamos mostrar una notificación de error al usuario
+      }
+    } catch (error) {
+      console.error('❌ Error crítico al guardar unidad:', error);
+      // Aquí podríamos mostrar una notificación de error al usuario
+    } finally {
+      // Limpiar progreso después de un tiempo
+      setTimeout(() => setUnitSaveProgress(null), 3000);
+    }
   };
 
   const handleObservationsChange = (value: string) => {
@@ -722,10 +761,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       } else {
         await saveTestToFirestore(updatedTest);
       }
-      
-      // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
+
+      // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
-      
+
       onTestUpdated();
     }
     
@@ -737,7 +776,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   };
 
   const [uploadingPhotos, setUploadingPhotos] = useState<Set<string>>(new Set());
-  
+  const [uploadProgress, setUploadProgress] = useState<{[key: string]: { stage: string; progress: number; message: string; retryCount?: number }}>({});
+  const [unitSaveProgress, setUnitSaveProgress] = useState<UnitSaveProgress | null>(null);
+
   const handlePhotoUpload = async (sampleId: string, file: File) => {
     try {
       // Verificar que la instancia MSAL esté disponible
@@ -754,61 +795,114 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
       // Marcar como subiendo
       setUploadingPhotos(prev => new Set([...prev, sampleId]));
-      
+
       // Limpiar URL anterior si existe (para evitar cache del navegador)
       const previousSample = editedTest.samples.find(s => s.id === sampleId);
       if (previousSample?.photoUrl) {
         console.log('🔄 Reemplazando foto anterior...');
       }
-      
+
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
         ...prev,
         samples: prev.samples.map(s => s.id === sampleId ? { ...s, photoUrl: tempUrl, isUploading: true } : s)
       }));
-      
-      // Subir SOLO a OneDrive (esto eliminará la anterior y subirá la nueva)
-      const photoUrl = await uploadPhotoToOneDrive(instance, loginRequest.scopes, editedTest.lotNumber, sampleId, file, editedTest.testType);
-      
-      // Actualizar con URL real y limpiar estado de carga
-      const updatedTest = {
-        ...editedTest,
-        samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, photoUrl, isUploading: false } : s)
-      };
-      
-      setEditedTest(updatedTest);
-      
-      // 🔥 AUTO-GUARDAR con sistema dual inmediatamente después de subir foto
-      try {
-        if (saveTestFn) {
-          await saveTestFn(updatedTest);
-        } else {
-          await saveTestToFirestore(updatedTest);
+
+      // 🆕 Usar el nuevo servicio confiable de subida de fotos
+      const result = await uploadPhotoReliably(
+        instance,
+        loginRequest.scopes,
+        editedTest.lotNumber,
+        sampleId,
+        file,
+        editedTest.testType,
+        {
+          maxRetries: 3,
+          retryDelay: 2000,
+          maxRetryDelay: 15000,
+          compressionQuality: 0.8,
+          maxFileSize: 5, // 5MB
+          enableLocalBackup: true,
+          enableQueue: true
+        },
+        (progress) => {
+          // Actualizar progreso en tiempo real
+          setUploadProgress(prev => ({
+            ...prev,
+            [sampleId]: progress
+          }));
         }
-      } catch (saveError: any) {
-        // No mostrar error al usuario para no interrumpir el flujo
+      );
+
+      if (result.success && result.photoUrl) {
+        // Actualizar con URL real y limpiar estado de carga
+        const updatedTest = {
+          ...editedTest,
+          samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, photoUrl: result.photoUrl, isUploading: false } : s)
+        };
+
+        setEditedTest(updatedTest);
+
+        // 🔥 AUTO-GUARDAR con sistema dual inmediatamente después de subir foto
+        try {
+          if (saveTestFn) {
+            await saveTestFn(updatedTest);
+          } else {
+            await saveTestToFirestore(updatedTest);
+          }
+        } catch (saveError: any) {
+          // No mostrar error al usuario para no interrumpir el flujo
+          console.warn('⚠️ Error guardando después de subida exitosa:', saveError);
+        }
+
+        // Limpiar progreso
+        setUploadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[sampleId];
+          return newProgress;
+        });
+
+        // Mostrar notificación exitosa con info de compresión si aplica
+        const compressionInfo = result.compressedSize && result.originalSize && result.compressedSize < result.originalSize
+          ? ` (comprimida: ${Math.round((result.originalSize - result.compressedSize) / 1024)}KB ahorrados)`
+          : '';
+
+        console.log(`✅ Foto subida exitosamente${compressionInfo}`);
+
+      } else {
+        // La subida falló después de todos los reintentos
+        throw new Error(result.error || 'Error desconocido en la subida');
       }
-      
+
       // Limpiar URL temporal
       URL.revokeObjectURL(tempUrl);
-      
-      // Mostrar notificación exitosa
+
     } catch (error: any) {
-      
+      console.error('❌ Error en subida de foto:', error);
+
       // Limpiar estado de carga en caso de error
       setEditedTest(prev => ({
         ...prev,
         samples: prev.samples.map(s => s.id === sampleId ? { ...s, photoUrl: '', isUploading: false } : s)
       }));
 
+      // Limpiar progreso
+      setUploadProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[sampleId];
+        return newProgress;
+      });
+
       // Mostrar mensaje de error más específico
       if (error.message.includes("cuenta activa") || error.message.includes("inicia sesión")) {
         alert("❌ Sesión expirada. Por favor, recarga la página para volver a iniciar sesión.");
       } else if (error.message.includes("MSAL no está disponible")) {
         alert("❌ Error de autenticación. Por favor, recarga la página.");
+      } else if (error.message.includes("Sin conexión")) {
+        alert("❌ Sin conexión a internet. La foto se guardará localmente y se subirá cuando recuperes la conexión.");
       } else {
-        alert(`❌ Error al subir foto: ${error.message}`);
+        alert(`❌ Error al subir foto: ${error.message}\n\nLa foto se intentará subir automáticamente cuando sea posible.`);
       }
     } finally {
       // Limpiar estado de carga
@@ -831,11 +925,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       } else {
         await saveTestToFirestore(editedTest);
       }
-      
-      // 🆕 Marcar como guardado SIN notificación (false) para evitar duplicados
-      // El auto-guardado ya muestra notificación verde automáticamente
+
+      // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
-      
+
       onTestUpdated();
     } catch (error: any) {
       // Solo mostrar alert en caso de ERROR
@@ -923,6 +1016,50 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       {/* 🆕 Indicador de estado de auto-guardado */}
       <div className="mb-3">
         <AutoSaveIndicator status={autoSaveStatus} />
+        
+        {/* Indicador de guardado de unidades */}
+        {unitSaveProgress && (
+          <div className="fixed top-4 right-4 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[250px]">
+            <div className="flex items-center gap-2 mb-2">
+              {unitSaveProgress.stage === 'completed' ? (
+                <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                  <Check size={12} className="text-white" />
+                </div>
+              ) : unitSaveProgress.stage === 'error' ? (
+                <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                  <X size={12} className="text-white" />
+                </div>
+              ) : (
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+              )}
+              <span className="text-sm font-medium text-gray-900">
+                {unitSaveProgress.stage === 'validating' && 'Validando...'}
+                {unitSaveProgress.stage === 'saving' && 'Guardando unidades...'}
+                {unitSaveProgress.stage === 'verifying' && 'Verificando...'}
+                {unitSaveProgress.stage === 'completed' && '¡Guardado!'}
+                {unitSaveProgress.stage === 'error' && 'Error al guardar'}
+              </span>
+            </div>
+            
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-1">
+              <div 
+                className={`h-full transition-all duration-300 ease-out rounded-full ${
+                  unitSaveProgress.stage === 'completed' ? 'bg-green-500' :
+                  unitSaveProgress.stage === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                }`}
+                style={{ width: `${unitSaveProgress.progress}%` }}
+              ></div>
+            </div>
+            
+            <p className="text-xs text-gray-600">{unitSaveProgress.message}</p>
+            
+            {unitSaveProgress.retryCount && unitSaveProgress.retryCount > 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                Reintento {unitSaveProgress.retryCount}/3
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 🆕 Notificación flotante de guardado */}
@@ -1194,10 +1331,24 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label htmlFor={`raw-${sample.id}`} className="text-xs sm:text-sm font-medium">Unidades Crudo</Label>
-                    {sample.rawUnits !== undefined && sample.rawUnits !== null ? (
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+                    {unitSaveProgress && ((unitSaveProgress.sampleId === sample.id && unitSaveProgress.field === 'rawUnits') || unitSaveProgress.sampleId === 'validation') ? (
+                      // Indicador de progreso específico para esta unidad
+                      unitSaveProgress.stage === 'completed' ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold animate-pulse">✓</span>
+                      ) : unitSaveProgress.stage === 'error' ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-xs font-bold">✗</span>
+                      ) : (
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600">
+                          <div className="animate-spin w-3 h-3 border border-blue-600 border-t-transparent rounded-full"></div>
+                        </div>
+                      )
                     ) : (
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
+                      // Indicador de estado guardado
+                      sample.rawUnits !== undefined && sample.rawUnits !== null ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+                      ) : (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
+                      )
                     )}
                   </div>
                   <Input 
@@ -1240,10 +1391,24 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label htmlFor={`cooked-${sample.id}`} className="text-xs sm:text-sm font-medium">Unidades Cocido</Label>
-                    {sample.cookedUnits !== undefined && sample.cookedUnits !== null ? (
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+                    {unitSaveProgress && ((unitSaveProgress.sampleId === sample.id && unitSaveProgress.field === 'cookedUnits') || unitSaveProgress.sampleId === 'validation') ? (
+                      // Indicador de progreso específico para esta unidad
+                      unitSaveProgress.stage === 'completed' ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold animate-pulse">✓</span>
+                      ) : unitSaveProgress.stage === 'error' ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-xs font-bold">✗</span>
+                      ) : (
+                        <div className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600">
+                          <div className="animate-spin w-3 h-3 border border-blue-600 border-t-transparent rounded-full"></div>
+                        </div>
+                      )
                     ) : (
-                      <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
+                      // Indicador de estado guardado
+                      sample.cookedUnits !== undefined && sample.cookedUnits !== null ? (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+                      ) : (
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 text-xs">⏳</span>
+                      )
                     )}
                   </div>
                   <Input 
@@ -1328,7 +1493,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       {uploadingPhotos.has(sample.id) ? (
                         <>
                           <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                          <span className="text-[10px] sm:text-xs">Subiendo...</span>
+                          <span className="text-[10px] sm:text-xs">
+                            {uploadProgress[sample.id]?.stage === 'uploading' ? 'Subiendo...' :
+                             uploadProgress[sample.id]?.stage === 'compressing' ? 'Comprimiendo...' :
+                             uploadProgress[sample.id]?.stage === 'validating' ? 'Validando...' : 'Procesando...'}
+                          </span>
                         </>
                       ) : (
                         <>
@@ -1338,16 +1507,29 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       )}
                     </Button>
                     <Button 
-                      className="flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm border-0 transition-all"
+                      className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-gallery-${sample.id}`)?.click()}
                       disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4">
-                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-                        <circle cx="9" cy="9" r="2"/>
-                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-                      </svg>
-                      <span>Galería</span>
+                      {uploadingPhotos.has(sample.id) ? (
+                        <>
+                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                          <span className="text-[10px] sm:text-xs">
+                            {uploadProgress[sample.id]?.stage === 'uploading' ? 'Subiendo...' :
+                             uploadProgress[sample.id]?.stage === 'compressing' ? 'Comprimiendo...' :
+                             uploadProgress[sample.id]?.stage === 'validating' ? 'Validando...' : 'Procesando...'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-4 sm:h-4">
+                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                            <circle cx="9" cy="9" r="2"/>
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                          </svg>
+                          <span>Galería</span>
+                        </>
+                      )}
                     </Button>
                   </div>
                   
@@ -1355,8 +1537,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <div className="space-y-1 sm:space-y-2">
                       {/* Vista previa de la imagen */}
                       <div className="relative group w-full h-20 sm:h-24 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
-                        <img 
-                          src={sample.photoUrl} 
+                        <img
+                          src={sample.photoUrl}
                           alt={`Foto muestra ${formatTimeSlot(test.startTime, sample.timeSlot)}`}
                           className="w-full h-full object-cover transition-transform group-hover:scale-105"
                           onError={(e) => {
@@ -1380,14 +1562,42 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                         <div className="absolute top-2 right-2 flex gap-1">
                         </div>
                       </div>
-                      
+
+                      {/* Indicador de progreso de subida */}
+                      {uploadProgress[sample.id] && (
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ease-out rounded-full ${
+                              uploadProgress[sample.id].stage === 'completed' ? 'bg-green-500' :
+                              uploadProgress[sample.id].stage === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                            }`}
+                            style={{ width: `${uploadProgress[sample.id].progress}%` }}
+                          ></div>
+                        </div>
+                      )}
+
+                      {/* Mensaje de progreso */}
+                      {uploadProgress[sample.id] && (
+                        <div className="text-center">
+                          <p className={`text-xs font-medium ${
+                            uploadProgress[sample.id].stage === 'completed' ? 'text-green-600' :
+                            uploadProgress[sample.id].stage === 'error' ? 'text-red-600' : 'text-blue-600'
+                          }`}>
+                            {uploadProgress[sample.id].message}
+                            {uploadProgress[sample.id].retryCount && uploadProgress[sample.id].retryCount! > 0
+                              ? ` (${uploadProgress[sample.id].retryCount} reintento${uploadProgress[sample.id].retryCount! > 1 ? 's' : ''})`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
+
                       {/* Botón de descarga compacto */}
-                      <a 
-                        href={sample.photoUrl} 
+                      <a
+                        href={sample.photoUrl}
                         download={`${test.lotNumber}-${formatTimeSlot(test.startTime, sample.timeSlot)}.jpg`}
                         className="block"
                       >
-                        <Button 
+                        <Button
                           className="w-full h-7 gap-1 text-[10px] sm:text-xs bg-gray-700 hover:bg-gray-800 text-white rounded-lg shadow-sm border-0 transition-all font-medium"
                         >
                           ⬇️ Descargar
