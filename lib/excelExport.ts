@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx-js-style';
-import { format, addHours } from 'date-fns';
+import { format, addHours, parseISO } from 'date-fns';
 import { ResistanceTest, DailyReport } from './types';
 
 const styles = {
@@ -124,7 +124,7 @@ export const generateExcelBlob = (test: ResistanceTest): Blob => {
   const contentStartRow = 6;
   const contentStartCol = 4;
   const mainInfo = [
-    ['FECHA:', format(new Date(test.date), 'MM/dd/yyyy')],
+    ['FECHA:', format(parseISO(test.date), 'MM/dd/yyyy')],
     ['LOTE:', test.lotNumber],
     ['CERTIFICACION:', test.certificationType],
     ['PROVEEDOR:', test.provider],
@@ -148,7 +148,7 @@ export const generateExcelBlob = (test: ResistanceTest): Blob => {
   let lastRaw = 0, lastCooked = 0;
   test.samples.forEach((sample, i) => {
     const slotDate = addHours(
-      new Date(`${format(new Date(test.date), 'yyyy-MM-dd')}T${test.startTime}`),
+      new Date(`${format(parseISO(test.date), 'yyyy-MM-dd')}T${test.startTime}`),
       sample.timeSlot
     );
     ws_data[tableHeaderRow + 1 + i][contentStartCol] = createCell(format(slotDate, 'HH:mm'), styles.value);
@@ -254,7 +254,7 @@ export const generateDailyReportBlob = (dailyReport: DailyReport): Blob => {
   const ws_data: any[][] = [];
   
   // Título del reporte
-  ws_data.push([createCell(`REPORTE DIARIO - ${format(new Date(dailyReport.date), 'dd/MM/yyyy')}`, {
+  ws_data.push([createCell(`REPORTE DIARIO - ${format(parseISO(dailyReport.date), 'dd/MM/yyyy')}`, {
     font: { bold: true, sz: 14, color: { rgb: "FFFFFFFF" } },
     fill: { fgColor: { rgb: "FF002060" } },
     alignment: { horizontal: 'center', vertical: 'center' }
@@ -279,7 +279,7 @@ export const generateDailyReportBlob = (dailyReport: DailyReport): Blob => {
   dailyReport.tests.forEach(test => {
     test.samples.forEach((sample, idx) => {
       const slotDate = addHours(
-        new Date(`${format(new Date(test.date), 'yyyy-MM-dd')}T${test.startTime}`),
+        new Date(`${format(parseISO(test.date), 'yyyy-MM-dd')}T${test.startTime}`),
         sample.timeSlot
       );
       
