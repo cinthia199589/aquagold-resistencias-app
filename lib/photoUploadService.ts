@@ -50,33 +50,78 @@ export const validateConnectivity = async (): Promise<{
   quality: 'good' | 'fair' | 'poor';
   latency?: number;
 }> => {
+  // Usar navigator.onLine como primera verificación rápida
   if (!navigator.onLine) {
     return { isOnline: false, quality: 'poor' };
   }
 
+  // Intentar verificar conectividad real con timeout manual
+  let timeoutId2: NodeJS.Timeout | undefined;
+
   try {
     const startTime = Date.now();
-    // Hacer una petición rápida a un endpoint confiable
-    const response = await fetch('https://www.google.com/favicon.ico', {
-      method: 'HEAD',
-      cache: 'no-cache',
-      signal: AbortSignal.timeout(5000)
-    });
 
-    const latency = Date.now() - startTime;
+    // Crear una promesa que se resuelve cuando fetch termina o cuando timeout expira
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
 
-    if (!response.ok) {
-      return { isOnline: false, quality: 'poor' };
+    try {
+      const response = await fetch('https://www.google.com/favicon.ico', {
+        method: 'HEAD',
+        cache: 'no-cache',
+        signal: controller.signal,
+        mode: 'no-cors' // Evitar problemas de CORS
+      });
+
+      clearTimeout(timeoutId);
+      const latency = Date.now() - startTime;
+
+      // Con 'no-cors', no podemos verificar response.ok, pero si llega aquí es que hay conectividad
+      let quality: 'good' | 'fair' | 'poor';
+      if (latency < 500) quality = 'good';
+      else if (latency < 2000) quality = 'fair';
+      else quality = 'poor';
+
+      return { isOnline: true, quality, latency };
+
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Si falla el primer intento, intentar con un endpoint diferente
+      try {
+        const startTime2 = Date.now();
+        const controller2 = new AbortController();
+        timeoutId2 = setTimeout(() => controller2.abort(), 5000);
+
+        const response2 = await fetch('https://httpstat.us/200', {
+          method: 'HEAD',
+          cache: 'no-cache',
+          signal: controller2.signal,
+          mode: 'no-cors'
+        });
+
+        clearTimeout(timeoutId2);
+        const latency2 = Date.now() - startTime2;
+
+        let quality: 'good' | 'fair' | 'poor';
+        if (latency2 < 500) quality = 'good';
+        else if (latency2 < 2000) quality = 'fair';
+        else quality = 'poor';
+
+        return { isOnline: true, quality, latency: latency2 };
+
+      } catch (secondError) {
+        // Limpiar timeout si existe
+        if (timeoutId2) {
+          clearTimeout(timeoutId2);
+        }
+        // Ambos intentos fallaron
+        return { isOnline: false, quality: 'poor' };
+      }
     }
 
-    // Clasificar calidad basado en latencia
-    let quality: 'good' | 'fair' | 'poor';
-    if (latency < 500) quality = 'good';
-    else if (latency < 2000) quality = 'fair';
-    else quality = 'poor';
-
-    return { isOnline: true, quality, latency };
   } catch (error) {
+    // Error general (probablemente timeout)
     return { isOnline: false, quality: 'poor' };
   }
 };
