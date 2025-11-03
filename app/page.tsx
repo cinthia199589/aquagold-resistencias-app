@@ -953,15 +953,36 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return;
     }
 
-    // Validar que todas las fotos estén tomadas
+    // Validar que TODAS las fotos y unidades estén completas
     const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+    
+    const missingItems = [];
     
     if (samplesWithoutPhoto.length > 0) {
       const missingHours = samplesWithoutPhoto.map(sample => 
         formatTimeSlot(editedTest.startTime, sample.timeSlot)
       ).join(', ');
-      
-      alert(`⚠️ No se puede completar la prueba. Faltan fotos en las siguientes horas:\n${missingHours}\n\nPor favor tome todas las fotos antes de completar.`);
+      missingItems.push(`• Fotos en las horas: ${missingHours}`);
+    }
+    
+    if (samplesWithoutRawUnits.length > 0) {
+      const missingHours = samplesWithoutRawUnits.map(sample => 
+        formatTimeSlot(editedTest.startTime, sample.timeSlot)
+      ).join(', ');
+      missingItems.push(`• Unidades en crudo en las horas: ${missingHours}`);
+    }
+    
+    if (samplesWithoutCookedUnits.length > 0) {
+      const missingHours = samplesWithoutCookedUnits.map(sample => 
+        formatTimeSlot(editedTest.startTime, sample.timeSlot)
+      ).join(', ');
+      missingItems.push(`• Unidades cocidas en las horas: ${missingHours}`);
+    }
+    
+    if (missingItems.length > 0) {
+      alert(`⚠️ No se puede completar la resistencia. Faltan completar:\n\n${missingItems.join('\n')}\n\nPor favor complete todos los datos antes de finalizar.`);
       return;
     }
 
@@ -1101,18 +1122,34 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <span className="text-gray-600 dark:text-gray-400">
                       📷 Fotos: {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length}/{editedTest.samples.length}
                     </span>
-                    {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length === editedTest.samples.length && (
+                    {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length === editedTest.samples.length ? (
                       <span className="text-green-600 font-medium">✓</span>
+                    ) : (
+                      <span className="text-red-500 font-medium">✗</span>
                     )}
                   </div>
                   
-                  {/* Indicador de datos */}
+                  {/* Indicador de unidades en crudo */}
                   <div className="flex items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400">
-                      📊 Datos: {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null && s.cookedUnits !== undefined && s.cookedUnits !== null).length}/{editedTest.samples.length}
+                      🥩 Crudo: {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null).length}/{editedTest.samples.length}
                     </span>
-                    {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null && s.cookedUnits !== undefined && s.cookedUnits !== null).length === editedTest.samples.length && (
+                    {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null).length === editedTest.samples.length ? (
                       <span className="text-green-600 font-medium">✓</span>
+                    ) : (
+                      <span className="text-red-500 font-medium">✗</span>
+                    )}
+                  </div>
+                  
+                  {/* Indicador de unidades cocidas */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      🍤 Cocido: {editedTest.samples.filter(s => s.cookedUnits !== undefined && s.cookedUnits !== null).length}/{editedTest.samples.length}
+                    </span>
+                    {editedTest.samples.filter(s => s.cookedUnits !== undefined && s.cookedUnits !== null).length === editedTest.samples.length ? (
+                      <span className="text-green-600 font-medium">✓</span>
+                    ) : (
+                      <span className="text-red-500 font-medium">✗</span>
                     )}
                   </div>
                   
@@ -1146,14 +1183,32 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   <Save size={16} className="mr-2"/>
                   {isSaving ? 'Guardando...' : 'Guardar'}
                 </Button>
-                <div title={editedTest.samples.some(sample => !sample.photoUrl || sample.photoUrl.trim() === '') ? 
-                    'Faltan fotos por tomar. Complete todas las fotos para poder finalizar.' : 
-                    'Completar prueba y generar reporte Excel'
-                  }>
+                <div title={(() => {
+                    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+                    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+                    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+                    
+                    const missingItems = [];
+                    if (samplesWithoutPhoto.length > 0) missingItems.push('fotos');
+                    if (samplesWithoutRawUnits.length > 0) missingItems.push('unidades en crudo');
+                    if (samplesWithoutCookedUnits.length > 0) missingItems.push('unidades cocidas');
+                    
+                    return missingItems.length > 0 
+                      ? `Faltan: ${missingItems.join(', ')}. Complete todos los datos para poder finalizar.`
+                      : 'Completar prueba y generar reporte Excel';
+                  })()}>
                   <Button 
                     className="h-11 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" 
                     onClick={handleComplete} 
-                    disabled={isCompleting || editedTest.samples.some(sample => !sample.photoUrl || sample.photoUrl.trim() === '')}
+                    disabled={isCompleting || 
+                      editedTest.samples.some(sample => 
+                        !sample.photoUrl || 
+                        sample.photoUrl.trim() === '' ||
+                        sample.rawUnits === undefined || 
+                        sample.rawUnits === null ||
+                        sample.cookedUnits === undefined || 
+                        sample.cookedUnits === null
+                      )}
                   >
                     <CheckCircle size={16} className="mr-2"/>
                     {isCompleting ? 'Completando...' : 'Completar'}
