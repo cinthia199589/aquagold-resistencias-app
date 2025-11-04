@@ -694,9 +694,27 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
   const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
     // Actualizar estado local inmediatamente para feedback visual
+    const updatedSamples = editedTest.samples.map(s => {
+      if (s.id === sampleId) {
+        const updatedSample = { ...s, [field]: value };
+        console.log(`🔄 Actualizando muestra ${sampleId}:`, {
+          rawUnits: updatedSample.rawUnits,
+          cookedUnits: updatedSample.cookedUnits,
+          hasPhoto: Boolean(updatedSample.photoUrl),
+          isComplete: updatedSample.rawUnits !== undefined && 
+                     updatedSample.rawUnits !== null && 
+                     updatedSample.cookedUnits !== undefined && 
+                     updatedSample.cookedUnits !== null && 
+                     updatedSample.photoUrl
+        });
+        return updatedSample;
+      }
+      return s;
+    });
+    
     const updatedTest = {
       ...editedTest,
-      samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, [field]: value } : s)
+      samples: updatedSamples
     };
     setEditedTest(updatedTest);
 
@@ -837,9 +855,27 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
       if (result.success && result.photoUrl) {
         // Actualizar con URL real y limpiar estado de carga
+        const updatedSamples = editedTest.samples.map(s => {
+          if (s.id === sampleId) {
+            const updatedSample = { ...s, photoUrl: result.photoUrl, isUploading: false };
+            console.log(`📸 Foto subida para muestra ${sampleId}:`, {
+              rawUnits: updatedSample.rawUnits,
+              cookedUnits: updatedSample.cookedUnits,
+              hasPhoto: Boolean(updatedSample.photoUrl),
+              isComplete: updatedSample.rawUnits !== undefined && 
+                         updatedSample.rawUnits !== null && 
+                         updatedSample.cookedUnits !== undefined && 
+                         updatedSample.cookedUnits !== null && 
+                         updatedSample.photoUrl
+            });
+            return updatedSample;
+          }
+          return s;
+        });
+        
         const updatedTest = {
           ...editedTest,
-          samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, photoUrl: result.photoUrl, isUploading: false } : s)
+          samples: updatedSamples
         };
 
         setEditedTest(updatedTest);
@@ -1356,17 +1392,32 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
           {(editedTest.samples || []).map(sample => {
-            // Determinar si la muestra está completa
-            const isComplete = sample.rawUnits !== undefined && sample.rawUnits !== null && 
-                              sample.cookedUnits !== undefined && sample.cookedUnits !== null && 
-                              sample.photoUrl && sample.photoUrl.trim() !== '';
+            // Determinar si la muestra está completa (verificar CADA campo)
+            const hasPhoto = Boolean(sample.photoUrl && sample.photoUrl.trim() !== '');
+            const hasRawUnits = sample.rawUnits !== undefined && sample.rawUnits !== null;
+            const hasCookedUnits = sample.cookedUnits !== undefined && sample.cookedUnits !== null;
+            const isComplete = hasPhoto && hasRawUnits && hasCookedUnits;
+            
+            // Clases separadas para mejor detección de cambios
+            const cardClasses = [
+              "w-full",
+              "shadow-lg",
+              "hover:shadow-xl",
+              "transition-all",
+              "duration-300",
+              "rounded-lg",
+              "border-4",
+              isComplete ? "border-green-500" : "border-gray-300",
+              isComplete ? "dark:border-green-400" : "dark:border-gray-600",
+              isComplete ? "bg-green-50" : "bg-white",
+              isComplete ? "dark:bg-green-950" : "dark:bg-slate-800",
+              isComplete ? "ring-4" : "",
+              isComplete ? "ring-green-200" : "",
+              isComplete ? "dark:ring-green-900" : ""
+            ].filter(Boolean).join(" ");
             
             return (
-            <Card key={sample.id} className={`w-full border-4 shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg ${
-              isComplete 
-                ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-950 ring-4 ring-green-200 dark:ring-green-900' 
-                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800'
-            }`}>
+            <Card key={`${sample.id}-${isComplete}`} className={cardClasses}>
               <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg bg-gradient-to-r ${
                 isComplete 
                   ? 'from-green-600 to-green-700 dark:from-green-700 dark:to-green-800' 
@@ -1749,9 +1800,15 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   
-  // 💾 PERSISTENTE: El modo se guarda en localStorage
-  const [workMode, setWorkMode] = useState<TestType>('MATERIA_PRIMA');
-  const [workModeSaved, setWorkModeSaved] = useState(false);
+  // 💾 PERSISTENTE: El modo se carga INMEDIATAMENTE desde localStorage para evitar parpadeo
+  const [workMode, setWorkMode] = useState<TestType>(() => {
+    if (typeof window !== 'undefined') {
+      const savedMode = localStorage.getItem('workMode') as TestType | null;
+      console.log(`🔄 Inicializando workMode desde localStorage: ${savedMode || 'MATERIA_PRIMA (default)'}`);
+      return savedMode || 'MATERIA_PRIMA';
+    }
+    return 'MATERIA_PRIMA';
+  });
   
   // ✅ NUEVO: Infinite scroll - Mostrar 30 inicialmente
   const [visibleCount, setVisibleCount] = useState(30);
@@ -1803,24 +1860,13 @@ const DashboardPage = () => {
     }
   };
 
-  // 💾 PERSISTENCIA: Cargar modo guardado y guardar cuando cambie
+  // 💾 PERSISTENCIA: Guardar modo cuando cambie
   useEffect(() => {
-    // Al montar: cargar modo guardado
-    if (typeof window !== 'undefined' && !workModeSaved) {
-      const savedMode = localStorage.getItem('workMode') as TestType | null;
-      if (savedMode) {
-        setWorkMode(savedMode);
-      }
-      setWorkModeSaved(true);
-    }
-  }, [workModeSaved]);
-
-  // Guardar modo cuando cambie
-  useEffect(() => {
-    if (workModeSaved && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       localStorage.setItem('workMode', workMode);
+      console.log(`💾 Modo guardado: ${workMode}`);
     }
-  }, [workMode, workModeSaved]);
+  }, [workMode]);
 
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
@@ -1857,7 +1903,7 @@ const DashboardPage = () => {
   // 🔥 CRÍTICO FIX: Ejecutar filterTests cuando workMode cambia
   // Esto previene que los tests "desaparezcan" cuando el usuario cambia entre tipos
   useEffect(() => {
-    if (allTests.length > 0 && workModeSaved) {
+    if (allTests.length > 0) {
       console.log(`🔄 Re-filtrando tests porque workMode cambió a: ${workMode}`);
       filterTests(allTests, showAll);
     }
