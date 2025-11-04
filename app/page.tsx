@@ -821,8 +821,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           maxRetries: 3,
           retryDelay: 2000,
           maxRetryDelay: 15000,
-          compressionQuality: 0.8,
-          maxFileSize: 5, // 5MB
+          compressionQuality: 0.80, // Calidad 80% - Balance óptimo
+          maxFileSize: 3, // 3MB - Buen balance para móviles
           enableLocalBackup: true,
           enableQueue: true
         },
@@ -1362,22 +1362,25 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                               sample.photoUrl && sample.photoUrl.trim() !== '';
             
             return (
-            <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all rounded-lg ${
+            <Card key={sample.id} className={`w-full border-4 shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg ${
               isComplete 
-                ? 'border-green-400 dark:border-green-500' 
-                : 'border-amber-300 dark:border-amber-500'
+                ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-950 ring-4 ring-green-200 dark:ring-green-900' 
+                : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-slate-800'
             }`}>
               <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg bg-gradient-to-r ${
                 isComplete 
-                  ? 'from-green-500 to-green-600 dark:from-green-600 dark:to-green-700' 
-                  : 'from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700'
+                  ? 'from-green-600 to-green-700 dark:from-green-700 dark:to-green-800' 
+                  : 'from-gray-500 to-gray-600 dark:from-gray-600 dark:to-gray-700'
               }`}>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white font-semibold text-xs sm:text-base">
+                  <CardTitle className="text-white font-semibold text-xs sm:text-base flex items-center gap-2">
                     🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
+                    {isComplete && <span className="text-lg">✅</span>}
                   </CardTitle>
-                  <span className="text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full text-white font-medium">
-                    {isComplete ? '✓ Listo' : 'Pendiente'}
+                  <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full text-white font-bold ${
+                    isComplete ? 'bg-green-800' : 'bg-gray-700'
+                  }`}>
+                    {isComplete ? '✓ COMPLETO' : '⏳ Pendiente'}
                   </span>
                 </div>
               </CardHeader>

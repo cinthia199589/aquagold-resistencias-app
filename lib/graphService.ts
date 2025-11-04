@@ -391,7 +391,7 @@ export const uploadPhotoToOneDrive = async (
     // Subir la nueva foto
     const uploadResponse = await callApi(uploadEndpoint, "PUT", photoBlob, "image/jpeg");
     
-    // ✨ FASE 1 FIX: Validar que la respuesta tiene los datos esperados
+    // ✨ VALIDACIÓN ROBUSTA: Verificar que la respuesta tiene los datos esperados
     if (!uploadResponse || !uploadResponse.id) {
       console.error(`❌ Respuesta inválida de OneDrive:`, uploadResponse);
       throw new Error(`OneDrive devolvió respuesta inválida (sin ID de archivo)`);
@@ -406,6 +406,26 @@ export const uploadPhotoToOneDrive = async (
     console.log(`   ID: ${uploadResponse.id}`);
     console.log(`   URL: ${uploadResponse.webUrl}`);
     console.log(`   Tamaño: ${uploadResponse.size} bytes`);
+    
+    // 🆕 ESPERAR 2 SEGUNDOS para que OneDrive procese el archivo
+    // Esto previene el error 404 cuando se accede inmediatamente después
+    console.log(`⏳ Esperando confirmación de OneDrive...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // 🆕 VERIFICAR que el archivo es accesible antes de retornar
+    try {
+      const verifyEndpoint = `/me/drive/items/${uploadResponse.id}`;
+      const verifyResponse = await callApi(verifyEndpoint, "GET");
+      
+      if (!verifyResponse || !verifyResponse.id) {
+        throw new Error('No se pudo verificar el archivo en OneDrive');
+      }
+      
+      console.log(`✅ Archivo verificado y accesible en OneDrive`);
+    } catch (verifyError: any) {
+      console.error(`⚠️ Advertencia: No se pudo verificar acceso al archivo:`, verifyError);
+      // No fallar aquí, pero registrar el problema
+    }
     
     // Usar directamente webUrl de OneDrive (es más confiable que construirla)
     const photoUrl = uploadResponse.webUrl;

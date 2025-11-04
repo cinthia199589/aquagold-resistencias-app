@@ -170,12 +170,15 @@ export const validateImageFile = (file: File): {
 
 /**
  * Comprime imagen manteniendo calidad aceptable
+ * Optimizado para reducir tamaño y acelerar subidas
+ * Calidad 0.80 = Balance perfecto entre tamaño y calidad visual
+ * Resolución 1600x1200 = Suficiente para ver detalles en móvil/desktop
  */
 export const compressImage = async (
   file: File,
-  quality: number = 0.8,
-  maxWidth: number = 1920,
-  maxHeight: number = 1080
+  quality: number = 0.80,
+  maxWidth: number = 1600,
+  maxHeight: number = 1200
 ): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
@@ -271,8 +274,8 @@ export const uploadPhotoReliably = async (
     maxRetries = 3,
     retryDelay = 1000,
     maxRetryDelay = 10000,
-    compressionQuality = 0.8,
-    maxFileSize = 5, // 5MB
+    compressionQuality = 0.80, // Calidad 80% - Balance óptimo tamaño/calidad
+    maxFileSize = 5, // 5MB (ya no se usa como límite, solo referencia)
     enableLocalBackup = true,
     enableQueue = true
   } = options;
@@ -308,23 +311,25 @@ export const uploadPhotoReliably = async (
     };
   }
 
-  // FASE 2: Compresión (si es necesario)
+  // FASE 2: Compresión (SIEMPRE comprimir para optimizar subida)
   let processedFile: Blob = file;
   let originalSize = file.size;
 
-  if (file.size > maxFileSize * 1024 * 1024) {
-    onProgress?.({
-      stage: 'compressing',
-      progress: 30,
-      message: 'Comprimiendo imagen...'
-    });
+  onProgress?.({
+    stage: 'compressing',
+    progress: 30,
+    message: 'Comprimiendo imagen...'
+  });
 
-    try {
-      processedFile = await compressImage(file, compressionQuality);
-      console.log(`🗜️ Imagen comprimida: ${originalSize} → ${processedFile.size} bytes`);
-    } catch (error) {
-      console.warn('⚠️ Error comprimiendo imagen, usando original:', error);
-    }
+  try {
+    // Comprimir siempre para reducir tamaño y acelerar subida
+    processedFile = await compressImage(file, compressionQuality);
+    const savedBytes = originalSize - processedFile.size;
+    const savedPercent = Math.round((savedBytes / originalSize) * 100);
+    console.log(`🗜️ Imagen comprimida: ${Math.round(originalSize/1024)}KB → ${Math.round(processedFile.size/1024)}KB (${savedPercent}% reducido)`);
+  } catch (error) {
+    console.warn('⚠️ Error comprimiendo imagen, usando original:', error);
+    processedFile = file; // Fallback a imagen original si falla compresión
   }
 
   // FASE 3: Backup local (si está habilitado)
@@ -355,22 +360,53 @@ export const uploadPhotoReliably = async (
         testType
       );
 
-      // FASE 5: Verificación final
+      // FASE 5: Verificación final MÁS ROBUSTA
       onProgress?.({
         stage: 'saving',
         progress: 90,
         message: 'Verificando subida...'
       });
 
-      // Verificar que la URL es accesible (opcional pero recomendado)
-      try {
-        const response = await fetch(photoUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-        if (!response.ok) {
-          throw new Error('URL subida no es accesible');
+      // 🆕 VERIFICACIÓN CRÍTICA: Confirmar que la URL es accesible
+      let verificationAttempts = 0;
+      const maxVerificationAttempts = 3;
+      let urlVerified = false;
+
+      while (verificationAttempts < maxVerificationAttempts && !urlVerified) {
+        try {
+          // Esperar un poco antes de verificar (dar tiempo a OneDrive)
+          if (verificationAttempts > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+          const response = await fetch(photoUrl, { 
+            method: 'HEAD',
+            signal: controller.signal,
+            cache: 'no-cache'
+          });
+
+          clearTimeout(timeoutId);
+
+          if (response.ok || response.status === 302 || response.status === 200) {
+            urlVerified = true;
+            console.log(`✅ URL verificada como accesible (intento ${verificationAttempts + 1})`);
+          } else {
+            throw new Error(`URL retornó estado: ${response.status}`);
+          }
+        } catch (verifyError: any) {
+          verificationAttempts++;
+          console.warn(`⚠️ Intento ${verificationAttempts} de verificación falló:`, verifyError.message);
+          
+          if (verificationAttempts >= maxVerificationAttempts) {
+            // Último intento falló - registrar pero NO fallar la subida
+            console.error(`❌ No se pudo verificar URL después de ${maxVerificationAttempts} intentos`);
+            console.error(`⚠️ ADVERTENCIA: La foto puede no ser accesible. URL: ${photoUrl}`);
+            // No lanzar error aquí para no perder la subida, pero registrar el problema
+          }
         }
-      } catch (verifyError) {
-        console.warn('⚠️ No se pudo verificar URL subida:', verifyError);
-        // No fallar por esto, continuar
       }
 
       onProgress?.({
@@ -378,6 +414,17 @@ export const uploadPhotoReliably = async (
         progress: 100,
         message: '¡Foto subida exitosamente!'
       });
+
+      // 🆕 LOG DETALLADO para diagnóstico
+      console.log(`📊 RESUMEN DE SUBIDA:`);
+      console.log(`   📍 Lote: ${lotNumber}`);
+      console.log(`   🔖 Muestra: ${sampleId}`);
+      console.log(`   📐 Tamaño original: ${Math.round(originalSize/1024)}KB`);
+      console.log(`   📉 Tamaño comprimido: ${Math.round(processedFile.size/1024)}KB`);
+      console.log(`   💾 Ahorro: ${Math.round((originalSize - processedFile.size)/1024)}KB (${Math.round(((originalSize - processedFile.size)/originalSize)*100)}%)`);
+      console.log(`   🔗 URL: ${photoUrl}`);
+      console.log(`   ✅ Verificación: ${urlVerified ? 'EXITOSA' : 'FALLIDA (pero subida completada)'}`);
+      console.log(`   🔄 Reintentos: ${retryCount}`);
 
       return {
         success: true,
