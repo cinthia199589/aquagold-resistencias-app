@@ -82,6 +82,28 @@ export const saveTestLocally = async (test: ResistanceTest): Promise<void> => {
 };
 
 /**
+ * Actualizar test en IndexedDB local Y disparar evento para refrescar UI
+ * Usa esta función cuando quieres que el progreso se actualice inmediatamente
+ */
+export const updateTestLocally = async (test: ResistanceTest): Promise<void> => {
+  try {
+    // 1. Guardar en IndexedDB
+    await saveTestLocally(test);
+    
+    // 2. Disparar evento personalizado para que el dashboard se refresque
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('testUpdated', { 
+        detail: { testId: test.id, test } 
+      }));
+      console.log('🔄 Evento testUpdated disparado para:', test.id);
+    }
+  } catch (error) {
+    console.error('❌ Error actualizando test localmente:', error);
+    throw error;
+  }
+};
+
+/**
  * Marcar test como pendiente de sincronización
  */
 export const markPendingSync = async (testId: string): Promise<void> => {

@@ -15,7 +15,7 @@ import {
   loadTestsHybridDual,
   saveTestHybridDual
 } from '../lib/firestoreService';
-import { getAllTestsLocally } from '../lib/localStorageService';
+import { getAllTestsLocally, updateTestLocally } from '../lib/localStorageService';
 import { 
   createLotFolder, 
   saveExcelToOneDrive, 
@@ -647,6 +647,18 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
   const [so2BfText, setSo2BfText] = useState<string>(test.so2Bf?.toString() || '');
 
+  // 🔄 CRÍTICO: Actualizar editedTest cuando el test prop cambie (ej: después de guardar unidades)
+  React.useEffect(() => {
+    console.log('🔄 Test prop cambió, actualizando editedTest con:', test);
+    setEditedTest({
+      ...test,
+      samples: test.samples || []
+    });
+    // También actualizar campos de texto
+    setSo2ResidualsText(test.so2Residuals?.toString() || '');
+    setSo2BfText(test.so2Bf?.toString() || '');
+  }, [test]); // Reaccionar a CUALQUIER cambio en test (React compara por referencia)
+
   // 🆕 Estado para modal de confirmación de eliminación
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean;
@@ -739,15 +751,20 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       );
 
       if (result.success) {
-        // ✅ NO recargar todos los tests, el estado local ya está actualizado
-        console.log(`✅ Unidad ${field} guardada exitosamente para muestra ${sampleId}`);
+        // ✅ Actualizar también el cache local para que el progreso se vea inmediatamente
+        try {
+          await updateTestLocally(updatedTest);
+          console.log(`✅ Unidad ${field} guardada y actualizada localmente para muestra ${sampleId}`);
+        } catch (localError) {
+          console.warn('⚠️ No se pudo actualizar cache local:', localError);
+        }
       } else {
         console.error('❌ Error al guardar unidad:', result.errors);
         alert(`⚠️ Error al guardar: ${result.errors?.join(', ')}`);
       }
     } catch (error) {
       console.error('❌ Error crítico al guardar unidad:', error);
-      // Aquí podríamos mostrar una notificación de error al usuario
+      alert(`❌ Error al guardar unidad. Los datos se guardarán cuando vuelva la conexión.`);
     } finally {
       // Limpiar progreso después de un tiempo
       setTimeout(() => setUnitSaveProgress(null), 3000);
@@ -981,6 +998,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   };
 
   const handleComplete = async () => {
+    console.log('🔍 VALIDACIÓN INICIADA - handleComplete()');
+    console.log('📊 editedTest.samples:', editedTest.samples);
+    
     // Verificar que la instancia MSAL esté disponible
     if (!instance) {
       alert("❌ La sesión no está activa. Por favor, recarga la página.");
@@ -999,6 +1019,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
     const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
     const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+    
+    console.log('🔍 Samples sin foto:', samplesWithoutPhoto.length, samplesWithoutPhoto);
+    console.log('🔍 Samples sin rawUnits:', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
+    console.log('🔍 Samples sin cookedUnits:', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
     
     const missingItems = [];
     
@@ -1023,10 +1047,15 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       missingItems.push(`• Unidades cocidas en las horas: ${missingHours}`);
     }
     
+    console.log('🔍 Items faltantes:', missingItems);
+    
     if (missingItems.length > 0) {
+      console.log('⚠️ VALIDACIÓN FALLIDA - Mostrando alerta');
       alert(`⚠️ No se puede completar la resistencia. Faltan completar:\n\n${missingItems.join('\n')}\n\nPor favor complete todos los datos antes de finalizar.`);
       return;
     }
+    
+    console.log('✅ VALIDACIÓN EXITOSA - Continuando con completar...');
 
     if (!confirm('¿Está seguro de marcar esta resistencia como completada? Se generará y guardará el reporte Excel automáticamente.')) {
       return;
@@ -2116,6 +2145,31 @@ const DashboardPage = () => {
     }
   }, [wasOffline]); // Se ejecuta cuando wasOffline cambia a true
 
+  // 🔄 NUEVO: Escuchar evento de actualización de tests para refrescar UI inmediatamente
+  useEffect(() => {
+    const handleTestUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{ testId: string; test: ResistanceTest }>;
+      console.log('🔔 Evento testUpdated recibido:', customEvent.detail.testId);
+      
+      // Actualizar la lista de tests con el test modificado (crear NUEVA referencia)
+      setAllTests(prevTests => {
+        const updatedTests = prevTests.map(t => 
+          t.id === customEvent.detail.testId 
+            ? { ...customEvent.detail.test } // ✅ Crear nueva referencia para que React detecte el cambio
+            : t
+        );
+        // Re-filtrar para actualizar la UI
+        filterTests(updatedTests, showAll);
+        return updatedTests;
+      });
+    };
+
+    window.addEventListener('testUpdated', handleTestUpdate);
+    return () => {
+      window.removeEventListener('testUpdated', handleTestUpdate);
+    };
+  }, [showAll]); // Dependencia de showAll para que filterTests tenga el valor correcto
+
   const handleSetRoute = (newRoute: string, params: any = null) => {
     setRoute(newRoute);
     setRouteParams(params);
@@ -2127,7 +2181,9 @@ const DashboardPage = () => {
         return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadAllTests} saveTestFn={saveTestDual} workMode={workMode} />;
       case 'test-detail':
         const test = tests.find(t => t.id === routeParams.id);
-        if (test) return <TestDetailPage test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
+        // ✅ Crear key único con contenido del test para forzar re-render cuando cambie
+        const testKey = test ? `${test.id}-${JSON.stringify(test.samples.map(s => ({r: s.rawUnits, c: s.cookedUnits, p: s.photoUrl})))}` : 'no-test';
+        if (test) return <TestDetailPage key={testKey} test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
         return <p>Test no encontrado</p>;
       default:
         return <ResistanceTestList setRoute={handleSetRoute} tests={tests} isLoading={isLoading} onRefresh={loadAllTests} onSearch={handleSearch} showAll={showAll} setShowAll={setShowAll} instance={instance} accounts={accounts} visibleCount={visibleCount} loadMoreTests={loadMoreTests} showSearchInFirestore={showSearchInFirestore} searchInFullHistory={searchInFullHistory} isSearching={isSearching} />;
