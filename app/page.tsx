@@ -245,7 +245,17 @@ const ResistanceTestList = ({
 }) => {
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<ResistanceTest | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const loginRequest = { scopes: ["User.Read", "Files.ReadWrite"] };
+
+  // Timer para actualizar el tiempo cada minuto
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Actualizar cada minuto
+    
+    return () => clearInterval(timer);
+  }, []);
 
   const formatTimeSlot = (baseTime: string, hoursToAdd: number) => {
     try {
@@ -424,6 +434,52 @@ const ResistanceTestList = ({
                                 );
                               })}
                             </div>
+                            
+                            {/* 📸 Banner de próxima foto - DEBAJO de los puntos indicadores */}
+                            {!test.isCompleted && (() => {
+                              const [startHours, startMinutes] = test.startTime.split(':').map(Number);
+                              
+                              // Encontrar la primera muestra sin foto
+                              const pendingSample = (test.samples || [])
+                                .filter(s => !s.photoUrl || s.photoUrl.trim() === '')
+                                .sort((a, b) => a.timeSlot - b.timeSlot)[0];
+                              
+                              if (pendingSample) {
+                                // ✅ CREAR FECHA LOCAL (sin UTC): Usar fecha como string YYYY-MM-DD
+                                const testDateStr = test.date.split('T')[0]; // "2025-11-05"
+                                const [year, month, day] = testDateStr.split('-').map(Number);
+                                
+                                // Crear fecha en hora local (no UTC)
+                                const scheduledTime = new Date(year, month - 1, day, startHours + pendingSample.timeSlot, startMinutes, 0, 0);
+                                
+                                const minutesUntil = Math.floor((scheduledTime.getTime() - currentTime.getTime()) / 60000);
+                                const isPast = minutesUntil < 0;
+                                const absMinutes = Math.abs(minutesUntil);
+                                const timeString = formatTimeSlot(test.startTime, pendingSample.timeSlot);
+                                
+                                // Convertir a horas si es más de 60 minutos
+                                const hours = Math.floor(absMinutes / 60);
+                                const mins = absMinutes % 60;
+                                const timeText = hours > 0 
+                                  ? `${hours}h ${mins}min` 
+                                  : `${mins} min`;
+                                
+                                return (
+                                  <div className={`mt-2 px-2 py-1.5 rounded text-[10px] sm:text-xs ${
+                                    isPast ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' : 
+                                    'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                                  }`}>
+                                    <div className="font-semibold">
+                                      {isPast ? '⚠️ Foto pendiente' : '📸 Próxima foto'}
+                                    </div>
+                                    <div className="text-[9px] sm:text-[10px]">
+                                      Hora {timeString} {isPast ? `(hace ${timeText})` : `en ${timeText}`}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -641,6 +697,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date()); // Estado para tiempo actual
   
   // Estados locales para campos de texto que aceptan decimales
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
@@ -690,6 +747,59 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return `+${hoursToAdd}h`;
     }
   };
+
+  // 🆕 Función para obtener la próxima muestra pendiente
+  const getNextPendingSample = () => {
+    if (!editedTest.startTime) return null;
+    
+    // ✅ VALIDAR FECHA: Solo mostrar si la prueba es de HOY
+    // Parsear fecha como string para evitar conversión UTC
+    const testDateStrCheck = editedTest.date.split('T')[0]; // "2025-11-05"
+    const [testYear, testMonth, testDay] = testDateStrCheck.split('-').map(Number);
+    const testDate = new Date(testYear, testMonth - 1, testDay, 0, 0, 0, 0);
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Si la prueba NO es de hoy, no mostrar banner
+    if (testDate.getTime() !== today.getTime()) {
+      return null;
+    }
+    
+    const [startHours, startMinutes] = editedTest.startTime.split(':').map(Number);
+    
+    // Encontrar la primera muestra sin foto
+    const pendingSample = editedTest.samples
+      .filter(s => !s.photoUrl || s.photoUrl.trim() === '')
+      .sort((a, b) => a.timeSlot - b.timeSlot)[0];
+    
+    if (!pendingSample) return null;
+    
+    // ✅ USAR FECHA COMPLETA: Combinar fecha de la prueba con la hora programada
+    // Parsear fecha como string para evitar conversión UTC
+    const testDateStrSchedule = editedTest.date.split('T')[0]; // "2025-11-05"
+    const [year, month, day] = testDateStrSchedule.split('-').map(Number);
+    const scheduledTime = new Date(year, month - 1, day, startHours + pendingSample.timeSlot, startMinutes, 0, 0);
+    
+    // Calcular minutos hasta la hora programada
+    const minutesUntil = Math.floor((scheduledTime.getTime() - currentTime.getTime()) / 60000);
+    
+    return {
+      sample: pendingSample,
+      scheduledTime,
+      minutesUntil,
+      timeString: formatTimeSlot(editedTest.startTime, pendingSample.timeSlot)
+    };
+  };
+
+  // Timer para actualizar el tiempo cada minuto
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Actualizar cada minuto
+    
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
     // Actualizar estado local inmediatamente para feedback visual
@@ -952,15 +1062,31 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return;
     }
 
-    // Validar que todas las fotos estén tomadas
+    // ✅ VALIDACIÓN COMPLETA: Verificar fotos Y unidades
     const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+    const samplesWithoutRaw = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+    const samplesWithoutCooked = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+    
+    // Construir mensaje detallado de lo que falta
+    let missingDetails = [];
     
     if (samplesWithoutPhoto.length > 0) {
-      const missingHours = samplesWithoutPhoto.map(sample => 
-        formatTimeSlot(editedTest.startTime, sample.timeSlot)
-      ).join(', ');
-      
-      alert(`⚠️ No se puede completar la prueba. Faltan fotos en las siguientes horas:\n${missingHours}\n\nPor favor tome todas las fotos antes de completar.`);
+      const hours = samplesWithoutPhoto.map(s => formatTimeSlot(editedTest.startTime, s.timeSlot)).join(', ');
+      missingDetails.push(`📷 FOTOS faltantes en: ${hours}`);
+    }
+    
+    if (samplesWithoutRaw.length > 0) {
+      const hours = samplesWithoutRaw.map(s => formatTimeSlot(editedTest.startTime, s.timeSlot)).join(', ');
+      missingDetails.push(`🔴 UNIDADES EN CRUDO faltantes en: ${hours}`);
+    }
+    
+    if (samplesWithoutCooked.length > 0) {
+      const hours = samplesWithoutCooked.map(s => formatTimeSlot(editedTest.startTime, s.timeSlot)).join(', ');
+      missingDetails.push(`🟢 UNIDADES EN COCIDO faltantes en: ${hours}`);
+    }
+    
+    if (missingDetails.length > 0) {
+      alert(`⚠️ NO SE PUEDE COMPLETAR LA RESISTENCIA\n\nFaltan los siguientes datos:\n\n${missingDetails.join('\n\n')}\n\n✋ Complete TODOS los datos antes de finalizar.`);
       return;
     }
 
@@ -1095,6 +1221,37 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               </CardDescription>
               {!editedTest.isCompleted && (
                 <div className="mt-2 text-xs sm:text-sm space-y-1">
+                  {/* 📸 Banner de próxima foto */}
+                  {(() => {
+                    const nextPending = getNextPendingSample();
+                    if (nextPending) {
+                      const { minutesUntil, timeString } = nextPending;
+                      const isPast = minutesUntil < 0;
+                      const absMinutes = Math.abs(minutesUntil);
+                      
+                      return (
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                          isPast ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700' : 
+                          'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700'
+                        }`}>
+                          <span className="text-lg">📸</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-900 dark:text-gray-100">
+                              {isPast ? '⚠️ Foto pendiente' : 'Próxima foto'}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              Hora {timeString} {isPast ? 
+                                `(hace ${absMinutes} min)` : 
+                                `en ${absMinutes} min`
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  
                   {/* Indicador de fotos */}
                   <div className="flex items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400">
@@ -1300,29 +1457,40 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
           {(editedTest.samples || []).map(sample => {
-            // Determinar si la muestra está completa
-            const isComplete = sample.rawUnits !== undefined && sample.rawUnits !== null && 
-                              sample.cookedUnits !== undefined && sample.cookedUnits !== null && 
-                              sample.photoUrl && sample.photoUrl.trim() !== '';
+            // Determinar si la muestra está completa (solo para resistencias en progreso)
+            const isComplete = !editedTest.isCompleted && (
+              sample.rawUnits !== undefined && sample.rawUnits !== null && 
+              sample.cookedUnits !== undefined && sample.cookedUnits !== null && 
+              sample.photoUrl && sample.photoUrl.trim() !== ''
+            );
+            
+            // Para resistencias completadas, usar estilo neutral
+            const isTestCompleted = editedTest.isCompleted;
             
             return (
             <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all rounded-lg ${
-              isComplete 
-                ? 'border-green-400 dark:border-green-500' 
-                : 'border-amber-300 dark:border-amber-500'
+              isTestCompleted 
+                ? 'border-gray-300 dark:border-gray-600' // Neutral para completadas
+                : isComplete 
+                  ? 'border-green-400 dark:border-green-500' // Verde para muestras completas en progreso
+                  : 'border-amber-300 dark:border-amber-500' // Amarillo para muestras incompletas en progreso
             }`}>
-              <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg bg-gradient-to-r ${
-                isComplete 
-                  ? 'from-green-500 to-green-600 dark:from-green-600 dark:to-green-700' 
-                  : 'from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700'
+              <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg ${
+                isTestCompleted 
+                  ? 'bg-gradient-to-r from-gray-500 to-gray-600 dark:from-gray-600 dark:to-gray-700' // Neutral para completadas
+                  : isComplete 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 dark:from-green-600 dark:to-green-700' // Verde para completas en progreso
+                    : 'bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700' // Amarillo para incompletas en progreso
               }`}>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white font-semibold text-xs sm:text-base">
                     🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
                   </CardTitle>
-                  <span className="text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full text-white font-medium">
-                    {isComplete ? '✓ Listo' : 'Pendiente'}
-                  </span>
+                  {!isTestCompleted && (
+                    <span className="text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full text-white font-medium">
+                      {isComplete ? '✓ Listo' : 'Pendiente'}
+                    </span>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 pt-2 p-2 sm:p-3">
@@ -1384,7 +1552,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     }}
                     placeholder="0-20"
                     disabled={editedTest.isCompleted}
-                    className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
+                    className={`h-8 sm:h-10 text-xs sm:text-sm font-semibold text-gray-900 border-2 focus:ring-2 rounded-lg shadow-sm transition-all placeholder:text-gray-400 ${
+                      !editedTest.isCompleted && sample.rawUnits !== undefined && sample.rawUnits !== null
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600 focus:border-green-500 focus:ring-green-200'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-200'
+                    }`}
                   />
                 </div>
                 <div className="space-y-1">
@@ -1444,7 +1616,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     }}
                     placeholder="0-20"
                     disabled={editedTest.isCompleted}
-                    className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
+                    className={`h-8 sm:h-10 text-xs sm:text-sm font-semibold text-gray-900 border-2 focus:ring-2 rounded-lg shadow-sm transition-all placeholder:text-gray-400 ${
+                      !editedTest.isCompleted && sample.cookedUnits !== undefined && sample.cookedUnits !== null
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-400 dark:border-green-600 focus:border-green-500 focus:ring-green-200'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-200'
+                    }`}
                   />
                 </div>
                 {/* Separador eliminado para spacing limpio */}
@@ -1534,12 +1710,12 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   
                   {sample.photoUrl && (
                     <div className="space-y-1 sm:space-y-2">
-                      {/* Vista previa de la imagen */}
-                      <div className="relative group w-full h-20 sm:h-24 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                      {/* Vista previa de la imagen - TAMAÑO FIJO */}
+                      <div className="relative group w-full h-32 sm:h-40 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
                         <img
                           src={sample.photoUrl}
                           alt={`Foto muestra ${formatTimeSlot(test.startTime, sample.timeSlot)}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          className="w-full h-full object-contain transition-transform group-hover:scale-105"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
