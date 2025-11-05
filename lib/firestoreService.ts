@@ -645,11 +645,6 @@ export const syncPendingData = async (): Promise<number> => {
 // ============================================
 
 import { 
-  uploadTestToOneDrive, 
-  downloadTestFromOneDrive, 
-  downloadMultipleTests 
-} from './onedriveDataService';
-import { 
   ResistanceTestIndex, 
   DualSaveResult 
 } from './types';
