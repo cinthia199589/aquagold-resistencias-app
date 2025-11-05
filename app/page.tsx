@@ -280,8 +280,8 @@ const ResistanceTestList = ({
 
   const handleDelete = async (test: ResistanceTest) => {
     try {
-      await deleteTest(test.id, test.lotNumber, test.testType, instance, loginRequest.scopes);
-      alert('✅ Resistencia eliminada exitosamente (incluyendo archivos de OneDrive)');
+      await deleteTest(test.id, test.lotNumber, test.testType, instance, loginRequest.scopes, test.date);
+      alert('✅ Resistencia eliminada exitosamente (incluyendo archivos y JSON de OneDrive)');
       onRefresh();
     } catch (error: any) {
       alert(`❌ Error al eliminar: ${error.message}`);
@@ -642,10 +642,20 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date()); // 🆕 Para actualizar cada minuto
   
   // Estados locales para campos de texto que aceptan decimales
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
   const [so2BfText, setSo2BfText] = useState<string>(test.so2Bf?.toString() || '');
+
+  // 🆕 NUEVO: Actualizar reloj cada minuto para detectar nuevas muestras habilitadas
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Actualizar cada minuto
+    
+    return () => clearInterval(timer);
+  }, []);
 
   // 🔄 CRÍTICO: Actualizar editedTest cuando el test prop cambie (ej: después de guardar unidades)
   React.useEffect(() => {
@@ -708,6 +718,59 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return date.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false });
     } catch {
       return `+${hoursToAdd}h`;
+    }
+  };
+
+  // 🆕 Calcular si una muestra debe estar habilitada (liberación progresiva cada 2 horas)
+  const isSampleEnabled = (sampleTimeSlot: number): boolean => {
+    try {
+      const [startHours, startMinutes] = test.startTime.split(':').map(Number);
+      const now = new Date();
+      
+      // Hora de inicio de la prueba
+      const startTime = new Date();
+      startTime.setHours(startHours, startMinutes, 0, 0);
+      
+      // Hora en que debería habilitarse esta muestra (startTime + timeSlot)
+      const sampleScheduleTime = new Date(startTime);
+      sampleScheduleTime.setHours(startHours + sampleTimeSlot, startMinutes, 0, 0);
+      
+      // La muestra se habilita cuando la hora actual >= hora programada
+      return now >= sampleScheduleTime;
+    } catch {
+      return true; // Si hay error, habilitar para no bloquear
+    }
+  };
+
+  // 🆕 Calcular la próxima muestra que se habilitará (para la notificación)
+  const getNextEnabledSample = (): number | null => {
+    for (const sample of editedTest.samples) {
+      if (!isSampleEnabled(sample.timeSlot)) {
+        return sample.timeSlot;
+      }
+    }
+    return null;
+  };
+
+  // 🆕 Calcular minutos hasta que se habilite la próxima muestra
+  const getMinutesUntilNextSample = (): number => {
+    try {
+      const [startHours, startMinutes] = test.startTime.split(':').map(Number);
+      const now = new Date();
+      const nextSlot = getNextEnabledSample();
+      
+      if (nextSlot === null) return 0; // Todas habilitadas
+      
+      const startTime = new Date();
+      startTime.setHours(startHours, startMinutes, 0, 0);
+      
+      const nextSampleTime = new Date(startTime);
+      nextSampleTime.setHours(startHours + nextSlot, startMinutes, 0, 0);
+      
+      const diffMs = nextSampleTime.getTime() - now.getTime();
+      return Math.max(0, Math.ceil(diffMs / 60000)); // Convertir a minutos
+    } catch {
+      return 0;
     }
   };
 
@@ -790,6 +853,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
   const confirmDelete = async () => {
     if (deleteConfirm.sampleId) {
+      const sampleToDelete = editedTest.samples.find(s => s.id === deleteConfirm.sampleId);
+      
       const updatedTest = {
         ...editedTest,
         samples: editedTest.samples.filter(s => s.id !== deleteConfirm.sampleId)
@@ -801,6 +866,26 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         await saveTestFn(updatedTest);
       } else {
         await saveTestToFirestore(updatedTest);
+      }
+
+      // 🆕 IMPORTANTE: Eliminar foto de OneDrive si existe
+      if (sampleToDelete?.photoUrl && instance) {
+        try {
+          const { deletePhotoFromOneDrive } = await import('../lib/graphService');
+          if (sampleToDelete.timeSlot !== undefined) {
+            await deletePhotoFromOneDrive(
+              instance,
+              loginRequest.scopes,
+              editedTest.lotNumber,
+              sampleToDelete.timeSlot,
+              editedTest.testType
+            );
+            console.log(`✅ Foto de muestra hora ${sampleToDelete.timeSlot} eliminada`);
+          }
+        } catch (photoError) {
+          console.warn('⚠️ No se pudo eliminar foto de OneDrive:', photoError);
+          // No bloquear el flujo
+        }
       }
 
       // 🆕 IMPORTANTE: Actualizar JSON en OneDrive para eliminar la muestra
@@ -1032,14 +1117,17 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return;
     }
 
-    // Validar que TODAS las fotos y unidades estén completas
-    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+    // Validar que TODAS las fotos y unidades HABILITADAS estén completas
+    // Solo validar muestras que han sido habilitadas según la hora actual
+    const enabledSamples = editedTest.samples.filter(sample => isSampleEnabled(sample.timeSlot));
+    const samplesWithoutPhoto = enabledSamples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+    const samplesWithoutRawUnits = enabledSamples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+    const samplesWithoutCookedUnits = enabledSamples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
     
-    console.log('🔍 Samples sin foto:', samplesWithoutPhoto.length, samplesWithoutPhoto);
-    console.log('🔍 Samples sin rawUnits:', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
-    console.log('🔍 Samples sin cookedUnits:', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
+    console.log('🔍 Samples habilitadas:', enabledSamples.length, enabledSamples);
+    console.log('🔍 Samples sin foto (habilitadas):', samplesWithoutPhoto.length, samplesWithoutPhoto);
+    console.log('🔍 Samples sin rawUnits (habilitadas):', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
+    console.log('🔍 Samples sin cookedUnits (habilitadas):', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
     
     const missingItems = [];
     
@@ -1487,6 +1575,17 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   </span>
                 </div>
               </CardHeader>
+              {!isComplete && !isSampleEnabled(sample.timeSlot) && (
+                <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 px-3 py-2 text-xs sm:text-sm text-amber-800 dark:text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔔</span>
+                    <div>
+                      <p className="font-semibold">Próxima muestra disponible en {getMinutesUntilNextSample()} minutos</p>
+                      <p className="text-xs opacity-80">Tomar foto: hora {getNextEnabledSample()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <CardContent className="space-y-2 pt-2 p-2 sm:p-3">
                 {/* Sección Unidades */}
                 <div className="space-y-1">
@@ -1545,7 +1644,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       }
                     }}
                     placeholder="0-20"
-                    disabled={editedTest.isCompleted}
+                    disabled={editedTest.isCompleted || !isSampleEnabled(sample.timeSlot)}
                     className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
@@ -1605,7 +1704,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       }
                     }}
                     placeholder="0-20"
-                    disabled={editedTest.isCompleted}
+                    disabled={editedTest.isCompleted || !isSampleEnabled(sample.timeSlot)}
                     className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
@@ -1649,7 +1748,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <Button 
                       className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-camera-${sample.id}`)?.click()}
-                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
+                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id) || !isSampleEnabled(sample.timeSlot)}
                     >
                       {uploadingPhotos.has(sample.id) ? (
                         <>
@@ -1670,7 +1769,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <Button 
                       className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-gallery-${sample.id}`)?.click()}
-                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
+                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id) || !isSampleEnabled(sample.timeSlot)}
                     >
                       {uploadingPhotos.has(sample.id) ? (
                         <>
@@ -1816,8 +1915,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     return;
                   }
                   try {
-                    await deleteTest(editedTest.id, editedTest.lotNumber, editedTest.testType, instance, loginRequest.scopes);
-                    alert('✅ Resistencia eliminada completamente (Firestore + OneDrive)');
+                    await deleteTest(editedTest.id, editedTest.lotNumber, editedTest.testType, instance, loginRequest.scopes, editedTest.date);
+                    alert('✅ Resistencia eliminada completamente (Firestore + OneDrive + JSON)');
                     onTestUpdated();
                     setRoute('dashboard');
                   } catch (error: any) {

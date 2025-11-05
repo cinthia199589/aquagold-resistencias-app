@@ -259,6 +259,39 @@ export const saveTestBackupJSON = async (
 };
 
 /**
+ * Elimina el archivo JSON de respaldo de un test desde OneDrive
+ */
+export const deleteTestBackupJSON = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  testId: string,
+  testDate: string,
+  testType: TestType
+): Promise<boolean> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
+  const month = testDate.substring(0, 7); // "2025-11"
+  
+  try {
+    const fileName = `${testId}.json`;
+    const jsonPath = `${folderName}/database/tests/${month}/${fileName}`;
+    const endpoint = `/me/drive/root:/${jsonPath}`;
+    
+    await callApi(endpoint, "DELETE");
+    console.log(`🗑️ JSON de respaldo eliminado: ${jsonPath}`);
+    return true;
+  } catch (error: any) {
+    // Si no existe (404), no es un error crítico
+    if (error.message.includes("404") || error.message.includes("itemNotFound")) {
+      console.log(`ℹ️ JSON ${testId} no existía en OneDrive`);
+      return true;
+    }
+    console.error(`❌ Error al eliminar JSON de respaldo:`, error);
+    return false;
+  }
+};
+
+/**
  * Lee un archivo JSON de respaldo desde OneDrive
  * Usado para cargar datos desde el archivo JSON en lugar de Firebase
  */
@@ -442,6 +475,36 @@ export const uploadPhotoToOneDrive = async (
 };
 
 /**
+ * Elimina una foto de OneDrive por timeSlot (hora_0.jpg, hora_2.jpg, etc)
+ */
+export const deletePhotoFromOneDrive = async (
+  msalInstance: IPublicClientApplication,
+  scopes: string[],
+  lotNumber: string,
+  timeSlot: number,
+  testType: TestType
+): Promise<void> => {
+  const callApi = await getGraphClient(msalInstance, scopes);
+  const folderName = getOneDriveFolderByType(testType);
+  
+  try {
+    const fileName = `hora_${timeSlot}.jpg`;
+    const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}`;
+    
+    await callApi(deleteEndpoint, "DELETE");
+    console.log(`🗑️ Foto eliminada: ${fileName} de ${lotNumber}`);
+  } catch (error: any) {
+    // Si no existe (404), no es un error crítico
+    if (error.message.includes("404") || error.message.includes("itemNotFound")) {
+      console.log(`ℹ️ Foto ${timeSlot} no existía en OneDrive`);
+      return;
+    }
+    console.error(`❌ Error al eliminar foto de OneDrive:`, error);
+    throw error;
+  }
+};
+
+/**
  * Genera y guarda el Excel de reporte diario separado por tipo (MP y PT)
  */
 export const saveDailyReportToOneDrive = async (
@@ -503,6 +566,7 @@ export const deleteLotFolderFromOneDrive = async (
   const folderName = getOneDriveFolderByType(testType);
   
   try {
+    // 1. Eliminar carpeta del lote (con fotos)
     const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}`;
     await callApi(deleteEndpoint, "DELETE");
     console.log(`🗑️ Carpeta ${lotNumber} eliminada de OneDrive (${folderName})`);
@@ -510,9 +574,9 @@ export const deleteLotFolderFromOneDrive = async (
     // Si no existe (404), no es un error crítico
     if (error.message.includes("404") || error.message.includes("itemNotFound")) {
       console.log(`ℹ️ Carpeta ${lotNumber} no existía en OneDrive`);
-      return;
+    } else {
+      console.error(`❌ Error al eliminar carpeta de OneDrive:`, error);
+      throw new Error(`Error al eliminar carpeta: ${error.message}`);
     }
-    console.error(`❌ Error al eliminar carpeta de OneDrive:`, error);
-    throw new Error(`Error al eliminar carpeta: ${error.message}`);
   }
 };
