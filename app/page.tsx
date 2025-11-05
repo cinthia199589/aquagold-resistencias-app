@@ -663,21 +663,26 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     data: {
       ...editedTest,
       // Excluir unidades del auto-guardado (se guardan manualmente con sistema confiable)
+      // MANTENER photoUrl en el auto-guardado (crítico para no perder fotos)
       samples: editedTest.samples.map(s => ({
-        ...s,
+        id: s.id,
+        timeSlot: s.timeSlot,
+        photoUrl: s.photoUrl, // ✅ MANTENER photoUrl
         rawUnits: undefined, // Excluido del auto-guardado
         cookedUnits: undefined // Excluido del auto-guardado
       }))
     },
     onSave: async () => {
+      // ⚠️ CRÍTICO: Guardar el editedTest COMPLETO, no la versión modificada
       if (saveTestFn) {
         await saveTestFn(editedTest);
       } else {
         await saveTestToFirestore(editedTest);
       }
-      onTestUpdated(); // Actualizar lista en dashboard
+      // ❌ NO recargar todos los tests después de cada auto-guardado
+      // onTestUpdated(); 
     },
-    delay: 0, // Guardado inmediato después de cualquier cambio
+    delay: 2000, // 2 segundos de delay para evitar guardados excesivos
     enabled: !test.isCompleted // Solo si NO está completada
   });
 
@@ -732,8 +737,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       );
 
       if (result.success) {
-        // Actualizar lista en dashboard
-        onTestUpdated();
+        // ✅ NO recargar todos los tests, solo actualizar estado local
         console.log(`✅ Unidad ${field} guardada exitosamente para muestra ${sampleId}`);
       } else {
         console.error('❌ Error al guardar unidad:', result.errors);
@@ -783,7 +787,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
 
-      onTestUpdated();
+      // ✅ NO recargar todos los tests, el estado local ya está actualizado
+      console.log('🗑️ Muestra eliminada y guardada');
     }
     
     setDeleteConfirm({ isOpen: false, sampleId: null, itemName: '' });
@@ -887,6 +892,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           } else {
             await saveTestToFirestore(updatedTest);
           }
+          
+          // ✅ Marcar como guardado para evitar que auto-save sobrescriba
+          markAsSaved(false);
+          
+          console.log(`💾 Test guardado con nueva foto para muestra ${sampleId}`);
         } catch (saveError: any) {
           // No mostrar error al usuario para no interrumpir el flujo
           console.warn('⚠️ Error guardando después de subida exitosa:', saveError);
@@ -965,7 +975,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
 
-      onTestUpdated();
+      // ✅ NO recargar todos los tests innecesariamente
+      console.log('💾 Guardado manual exitoso');
     } catch (error: any) {
       // Solo mostrar alert en caso de ERROR
       alert(`❌ Error al guardar: ${error.message}`);
