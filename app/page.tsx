@@ -246,6 +246,7 @@ const ResistanceTestList = ({
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<ResistanceTest | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null); // 🆕 Para layout 2 columnas
   const loginRequest = { scopes: ["User.Read", "Files.ReadWrite"] };
 
   // Timer para actualizar el tiempo cada minuto
@@ -377,44 +378,204 @@ const ResistanceTestList = ({
                 </div>
               ) : (
                 <>
+                  {/* 📊 Panel de Estadísticas - Solo Desktop */}
+                  <div className="hidden lg:grid lg:grid-cols-4 gap-4 mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                      <div className="text-3xl">⏳</div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Tests Activos</div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{tests.filter(t => !t.isCompleted).length}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                      <div className="text-3xl">📸</div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Fotos Pendientes</div>
+                        <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          {tests.reduce((acc, test) => acc + test.samples.filter(s => !s.photoUrl || s.photoUrl.trim() === '').length, 0)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                      <div className="text-3xl">✅</div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Completados Hoy</div>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                          {tests.filter(t => t.isCompleted && new Date(t.date).toDateString() === new Date().toDateString()).length}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
+                      <div className="text-3xl">📋</div>
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Registros</div>
+                        <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{tests.length}</div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* ✅ Mostrar indicador de cantidad */}
                   <div className="text-sm text-gray-600 dark:text-gray-400 mb-3 lg:mb-2">
                     Mostrando {Math.min(visibleCount, tests.length)} de {tests.length} resistencias
                   </div>
                   
-                  {/* ✅ GRID RESPONSIVE: Mostrar en columnas en desktop, filas en mobile */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 lg:gap-2">
+                  {/* 🖥️ LAYOUT DE 2 COLUMNAS - Solo Desktop (lg+) */}
+                  <div className="hidden lg:flex lg:gap-4">
+                    {/* COLUMNA IZQUIERDA - Lista de Tests (35%) */}
+                    <div className="lg:w-[35%] space-y-2 overflow-y-auto max-h-[70vh]">
+                      {tests.slice(0, visibleCount).map(test => (
+                        <div 
+                          key={test.id} 
+                          className={`border-2 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all cursor-pointer ${
+                            selectedTestId === test.id 
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                              : 'border-gray-600 dark:border-gray-600'
+                          }`}
+                          onClick={() => setSelectedTestId(test.id)}
+                        >
+                          <div className="font-medium text-gray-900 dark:text-gray-100 text-xs">
+                            Lote: {test.lotNumber}
+                          </div>
+                          <div className="text-[10px] text-gray-700 dark:text-gray-300 mt-0.5">
+                            <div>Prov: <strong>{test.provider}</strong></div>
+                            <div>Piscina: <strong>{test.pool}</strong></div>
+                          </div>
+                          <div className="mt-1">
+                            <div className="flex justify-between items-center mb-0.5">
+                              <span className="text-[10px] text-gray-700 dark:text-gray-300">Progreso</span>
+                              <span className="text-[10px] font-bold text-gray-900 dark:text-gray-100">{Math.round(calculateProgress(test))}%</span>
+                            </div>
+                            <Progress value={calculateProgress(test)} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* COLUMNA DERECHA - Preview del Test Seleccionado (65%) */}
+                    <div className="lg:w-[65%] border-2 border-blue-400 dark:border-blue-600 rounded-lg p-4 bg-white dark:bg-gray-800">
+                      {selectedTestId ? (() => {
+                        const selectedTest = tests.find(t => t.id === selectedTestId);
+                        if (!selectedTest) return <div className="text-center text-gray-500">Test no encontrado</div>;
+                        
+                        return (
+                          <div className="space-y-4">
+                            {/* Header del Preview */}
+                            <div className="flex justify-between items-start border-b pb-3">
+                              <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                  📋 Lote: {selectedTest.lotNumber}
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {selectedTest.provider} • Piscina {selectedTest.pool}
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => setRoute('test-detail', { id: selectedTest.id })}
+                                className="bg-blue-600 hover:bg-blue-700"
+                              >
+                                Ver Detalles →
+                              </Button>
+                            </div>
+
+                            {/* Progreso */}
+                            <div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium">Progreso General</span>
+                                <span className="text-lg font-bold text-blue-600">{Math.round(calculateProgress(selectedTest))}%</span>
+                              </div>
+                              <Progress value={calculateProgress(selectedTest)} />
+                            </div>
+
+                            {/* Galería de Fotos en Grid */}
+                            <div>
+                              <h4 className="text-sm font-bold mb-2">📸 Galería de Fotos</h4>
+                              <div className="grid grid-cols-4 gap-2">
+                                {selectedTest.samples.map(sample => (
+                                  <div key={sample.id} className="aspect-square rounded border-2 border-gray-300 overflow-hidden bg-gray-100">
+                                    {sample.photoUrl ? (
+                                      <img src={sample.photoUrl} alt={`Hora ${sample.timeSlot}`} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                                        <Camera size={16} />
+                                        <span className="text-[8px] mt-1">H{sample.timeSlot}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Estado de Muestras */}
+                            <div>
+                              <h4 className="text-sm font-bold mb-2">📊 Estado de Muestras</h4>
+                              <div className="grid grid-cols-2 gap-2">
+                                {selectedTest.samples.map(sample => {
+                                  const isComplete = sample.photoUrl && sample.photoUrl.trim() !== '' && 
+                                    sample.rawUnits !== undefined && sample.rawUnits !== null &&
+                                    sample.cookedUnits !== undefined && sample.cookedUnits !== null;
+                                  
+                                  return (
+                                    <div key={sample.id} className={`p-2 rounded border ${
+                                      isComplete ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'
+                                    }`}>
+                                      <div className="text-xs font-bold">🕐 {formatTimeSlot(selectedTest.startTime, sample.timeSlot)}</div>
+                                      <div className="text-[10px] mt-1 space-y-0.5">
+                                        <div>Crudo: {sample.rawUnits ?? 'N/A'}</div>
+                                        <div>Cocido: {sample.cookedUnits ?? 'N/A'}</div>
+                                        <div>{sample.photoUrl ? '✓ Con foto' : '✗ Sin foto'}</div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })() : (
+                        <div className="h-full flex items-center justify-center text-gray-400">
+                          <div className="text-center">
+                            <div className="text-4xl mb-3">👈</div>
+                            <p className="text-sm">Selecciona un test de la lista</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 📱 GRID MOBILE/TABLET - Vista Original */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden gap-2">
                     {tests.slice(0, visibleCount).map(test => (
                       <div 
                         key={test.id} 
-                        className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 sm:p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
+                        className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
                       >
                         <div onClick={() => setRoute('test-detail', { id: test.id })}>
-                          {/* Header responsive - Compacto */}
+                          {/* Header responsive - Mantener mobile, compactar desktop */}
                           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
                             <div className="flex flex-col sm:flex-row sm:items-center gap-1">
-                              <div className="font-medium text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 text-xs lg:text-[11px]">
                                 Lote: {test.lotNumber}
                               </div>
                             </div>
-                            <div className="text-xs text-gray-700 dark:text-gray-300 self-start sm:self-center">
+                            <div className="text-xs lg:text-[10px] text-gray-700 dark:text-gray-300 self-start sm:self-center">
                               {formatDateLocal(test.date)}
                             </div>
                           </div>
                           
-                          {/* Info responsive - Compacto */}
-                          <div className="text-xs text-gray-700 dark:text-gray-300 mt-1">
-                            <div className="flex flex-col sm:flex-row sm:gap-2">
-                              <span>Proveedor: <strong>{test.provider}</strong></span>
+                          {/* Info responsive - Mantener mobile, compactar desktop */}
+                          <div className="text-xs lg:text-[10px] text-gray-700 dark:text-gray-300 mt-1">
+                            <div className="flex flex-col lg:flex-col gap-0.5">
+                              <span className="truncate">Prov: <strong>{test.provider}</strong></span>
                               <span>Piscina: <strong>{test.pool}</strong></span>
                             </div>
                           </div>
                           
-                          {/* Progress bar responsive - Compacto */}
+                          {/* Progress bar responsive - Más compacto en desktop */}
                           <div className="mt-1">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Progreso</span>
-                              <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{Math.round(calculateProgress(test))}%</span>
+                            <div className="flex justify-between items-center mb-0.5 lg:mb-0.5">
+                              <span className="text-xs lg:text-[10px] font-medium text-gray-700 dark:text-gray-300">Progreso</span>
+                              <span className="text-xs lg:text-[10px] font-bold text-gray-900 dark:text-gray-100">{Math.round(calculateProgress(test))}%</span>
                             </div>
                             <Progress value={calculateProgress(test)} />
                             
@@ -465,14 +626,14 @@ const ResistanceTestList = ({
                                   : `${mins} min`;
                                 
                                 return (
-                                  <div className={`mt-2 px-2 py-1.5 rounded text-[10px] sm:text-xs ${
+                                  <div className={`mt-1.5 lg:mt-1 px-2 py-1 lg:py-0.5 rounded text-[10px] lg:text-[9px] ${
                                     isPast ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' : 
                                     'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                                   }`}>
                                     <div className="font-semibold">
                                       {isPast ? '⚠️ Foto pendiente' : '📸 Próxima foto'}
                                     </div>
-                                    <div className="text-[9px] sm:text-[10px]">
+                                    <div className="text-[9px] lg:text-[8px]">
                                       Hora {timeString} {isPast ? `(hace ${timeText})` : `en ${timeText}`}
                                     </div>
                                   </div>
@@ -1460,7 +1621,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
+        {/* 🎯 GRID OPTIMIZADO: Mobile 1 col, Tablet 2 cols, Desktop 3-4 cols */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6 w-full">
           {(editedTest.samples || []).map(sample => {
             // Determinar si la muestra está completa (solo para resistencias en progreso)
             const isComplete = !editedTest.isCompleted && (
@@ -1473,14 +1635,14 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             const isTestCompleted = editedTest.isCompleted;
             
             return (
-            <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all rounded-lg ${
+            <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-lg transition-all rounded-lg ${
               isTestCompleted 
                 ? 'border-gray-300 dark:border-gray-600' // Neutral para completadas
                 : isComplete 
                   ? 'border-green-400 dark:border-green-500' // Verde para muestras completas en progreso
                   : 'border-amber-300 dark:border-amber-500' // Amarillo para muestras incompletas en progreso
             }`}>
-              <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg ${
+              <CardHeader className={`pb-1 p-2 sm:p-2 lg:p-3 rounded-t-lg ${
                 isTestCompleted 
                   ? 'bg-gradient-to-r from-gray-500 to-gray-600 dark:from-gray-600 dark:to-gray-700' // Neutral para completadas
                   : isComplete 
@@ -1488,7 +1650,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     : 'bg-gradient-to-r from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700' // Amarillo para incompletas en progreso
               }`}>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white font-semibold text-xs sm:text-base">
+                  <CardTitle className="text-white font-semibold text-sm sm:text-base lg:text-lg">
                     🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
                   </CardTitle>
                   {!isTestCompleted && (
@@ -1498,7 +1660,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2 pt-2 p-2 sm:p-3">
+              <CardContent className="space-y-2 pt-2 p-2 sm:p-2 lg:p-3">
                 {/* Sección Unidades */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
@@ -1799,6 +1961,60 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             </Card>
           );
           })}
+        </div>
+
+        {/* 📸 GALERÍA COMPLETA - Solo Desktop */}
+        <div className="hidden lg:block mb-6 p-4 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-800 dark:to-gray-900 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+            <Camera size={24} className="text-blue-600" />
+            Galería de Fotos Completa
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+            {(editedTest.samples || [])
+              .sort((a, b) => a.timeSlot - b.timeSlot)
+              .map(sample => (
+                <div key={sample.id} className="group relative">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 hover:border-blue-500 dark:hover:border-blue-400 transition-all hover:shadow-xl">
+                    {sample.photoUrl ? (
+                      <>
+                        <img 
+                          src={sample.photoUrl} 
+                          alt={`Hora ${sample.timeSlot}`}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        />
+                        {/* Overlay con info */}
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-3">
+                          <div className="text-2xl font-bold mb-2">🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}</div>
+                          <div className="text-sm space-y-1 text-center">
+                            <div>Crudo: <strong>{sample.rawUnits ?? 'N/A'}</strong></div>
+                            <div>Cocido: <strong>{sample.cookedUnits ?? 'N/A'}</strong></div>
+                          </div>
+                          <a
+                            href={sample.photoUrl}
+                            download={`${test.lotNumber}-Hora-${sample.timeSlot}.jpg`}
+                            className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-medium transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            ⬇️ Descargar
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <Camera size={32} className="mb-2" />
+                        <p className="text-xs font-medium">Sin foto</p>
+                      </div>
+                    )}
+                  </div>
+                  {/* Label de hora */}
+                  <div className="mt-2 text-center">
+                    <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
 
         <div className="space-y-2">
