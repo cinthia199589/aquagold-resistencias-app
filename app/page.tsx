@@ -825,11 +825,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         console.log('🔄 Reemplazando foto anterior...');
       }
 
-      // Crear vista previa temporal mientras sube
-      const tempUrl = URL.createObjectURL(file);
+      // ✅ NO usar blob URL temporal para evitar errores en producción
+      // Solo marcar como "subiendo" sin cambiar photoUrl
       setEditedTest(prev => ({
         ...prev,
-        samples: prev.samples.map(s => s.id === sampleId ? { ...s, photoUrl: tempUrl, isUploading: true } : s)
+        samples: prev.samples.map(s => s.id === sampleId ? { ...s, isUploading: true } : s)
       }));
 
       // 🆕 Usar el nuevo servicio confiable de subida de fotos
@@ -920,9 +920,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         // La subida falló después de todos los reintentos
         throw new Error(result.error || 'Error desconocido en la subida');
       }
-
-      // Limpiar URL temporal
-      URL.revokeObjectURL(tempUrl);
 
     } catch (error: any) {
       console.error('❌ Error en subida de foto:', error);
