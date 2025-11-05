@@ -1149,17 +1149,16 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return;
     }
 
-    // Validar que TODAS las fotos y unidades HABILITADAS estén completas
-    // Solo validar muestras que han sido habilitadas según la hora actual
-    const enabledSamples = editedTest.samples.filter(sample => isSampleEnabled(sample.timeSlot));
-    const samplesWithoutPhoto = enabledSamples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-    const samplesWithoutRawUnits = enabledSamples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-    const samplesWithoutCookedUnits = enabledSamples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+    // Validar que TODAS las fotos y unidades estén completas
+    // Debe estar 100% completo para poder marcar como completado
+    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
     
-    console.log('🔍 Samples habilitadas:', enabledSamples.length, enabledSamples);
-    console.log('🔍 Samples sin foto (habilitadas):', samplesWithoutPhoto.length, samplesWithoutPhoto);
-    console.log('🔍 Samples sin rawUnits (habilitadas):', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
-    console.log('🔍 Samples sin cookedUnits (habilitadas):', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
+    console.log('🔍 Samples totales:', editedTest.samples.length);
+    console.log('🔍 Samples sin foto:', samplesWithoutPhoto.length, samplesWithoutPhoto);
+    console.log('🔍 Samples sin rawUnits:', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
+    console.log('🔍 Samples sin cookedUnits:', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
     
     const missingItems = [];
     
@@ -1397,11 +1396,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   {isSaving ? 'Guardando...' : 'Guardar'}
                 </Button>
                 <div title={(() => {
-                    // Solo verificar muestras habilitadas
-                    const enabledSamples = editedTest.samples.filter(sample => isSampleEnabled(sample.timeSlot));
-                    const samplesWithoutPhoto = enabledSamples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-                    const samplesWithoutRawUnits = enabledSamples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-                    const samplesWithoutCookedUnits = enabledSamples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+                    // Verificar TODAS las muestras - debe estar 100% completo
+                    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+                    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+                    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
                     
                     const missingItems = [];
                     if (samplesWithoutPhoto.length > 0) missingItems.push('fotos');
@@ -1409,23 +1407,21 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     if (samplesWithoutCookedUnits.length > 0) missingItems.push('unidades cocidas');
                     
                     return missingItems.length > 0 
-                      ? `Faltan: ${missingItems.join(', ')}. Complete todos los datos para poder finalizar.`
+                      ? `Faltan: ${missingItems.join(', ')}. Complete TODOS los datos de TODAS las horas para poder finalizar.`
                       : 'Completar prueba y generar reporte Excel';
                   })()}>
                   <Button 
                     className="h-11 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" 
                     onClick={handleComplete} 
                     disabled={isCompleting || 
-                      editedTest.samples
-                        .filter(sample => isSampleEnabled(sample.timeSlot))
-                        .some(sample => 
-                          !sample.photoUrl || 
-                          sample.photoUrl.trim() === '' ||
-                          sample.rawUnits === undefined || 
-                          sample.rawUnits === null ||
-                          sample.cookedUnits === undefined || 
-                          sample.cookedUnits === null
-                        )
+                      editedTest.samples.some(sample => 
+                        !sample.photoUrl || 
+                        sample.photoUrl.trim() === '' ||
+                        sample.rawUnits === undefined || 
+                        sample.rawUnits === null ||
+                        sample.cookedUnits === undefined || 
+                        sample.cookedUnits === null
+                      )
                     }
                   >
                     <CheckCircle size={16} className="mr-2"/>
@@ -1573,9 +1569,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
-          {(editedTest.samples || [])
-            .filter(sample => isSampleEnabled(sample.timeSlot))
-            .map(sample => {
+          {(editedTest.samples || []).map(sample => {
             // Determinar si la muestra está completa (verificar CADA campo)
             const hasPhoto = Boolean(sample.photoUrl && sample.photoUrl.trim() !== '');
             const hasRawUnits = sample.rawUnits !== undefined && sample.rawUnits !== null;
