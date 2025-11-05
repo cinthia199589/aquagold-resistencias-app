@@ -727,17 +727,19 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       const [startHours, startMinutes] = test.startTime.split(':').map(Number);
       const now = new Date();
       
-      // Hora de inicio de la prueba
-      const startTime = new Date();
-      startTime.setHours(startHours, startMinutes, 0, 0);
+      // Parsear la fecha de inicio (YYYY-MM-DD) + hora (HH:mm)
+      const [year, month, day] = test.date.split('-').map(Number);
+      const startTime = new Date(year, month - 1, day, startHours, startMinutes, 0, 0);
       
-      // Hora en que debería habilitarse esta muestra (startTime + timeSlot)
+      // Hora en que debería habilitarse esta muestra (startTime + timeSlot en horas)
       const sampleScheduleTime = new Date(startTime);
-      sampleScheduleTime.setHours(startHours + sampleTimeSlot, startMinutes, 0, 0);
+      sampleScheduleTime.setHours(sampleScheduleTime.getHours() + sampleTimeSlot);
       
       // La muestra se habilita cuando la hora actual >= hora programada
+      console.log(`🕐 [isSampleEnabled] timeSlot=${sampleTimeSlot}, startTime=${startTime.toLocaleString()}, scheduleTime=${sampleScheduleTime.toLocaleString()}, now=${now.toLocaleString()}, enabled=${now >= sampleScheduleTime}`);
       return now >= sampleScheduleTime;
-    } catch {
+    } catch (error) {
+      console.error('❌ Error en isSampleEnabled:', error);
       return true; // Si hay error, habilitar para no bloquear
     }
   };
