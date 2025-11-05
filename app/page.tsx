@@ -1218,7 +1218,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             [sampleId]: progress
           }));
         },
-        timeSlot // 🆕 Pasar el timeSlot para nombrar la foto
+        timeSlot, // 🆕 Pasar el timeSlot para nombrar la foto
+        editedTest.id // 🆕 Pasar el ID de la resistencia para nombres únicos
       );
 
       if (result.success && result.photoUrl) {

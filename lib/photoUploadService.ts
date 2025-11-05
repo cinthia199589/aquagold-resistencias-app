@@ -268,7 +268,8 @@ export const uploadPhotoReliably = async (
   testType: TestType,
   options: PhotoUploadOptions = {},
   onProgress?: (progress: UploadProgress) => void,
-  timeSlot?: number // 🆕 NUEVO: Hora para nombrar foto
+  timeSlot?: number, // 🆕 NUEVO: Hora para nombrar foto
+  testId?: string // 🆕 NUEVO: ID de resistencia para nombres únicos
 ): Promise<PhotoUploadResult> => {
 
   const {
@@ -359,7 +360,8 @@ export const uploadPhotoReliably = async (
         sampleId,
         processedFile,
         testType,
-        timeSlot // 🆕 Pasar timeSlot para nombrar la foto
+        timeSlot, // 🆕 Pasar timeSlot para nombrar la foto
+        testId // 🆕 Pasar testId para nombres únicos por resistencia
       );
 
       // FASE 5: Verificación final MÁS ROBUSTA
@@ -529,7 +531,10 @@ export const processPendingPhotoUploads = async (
         sampleId,
         file,
         testType,
-        { maxRetries: 2, enableQueue: false } // Menos reintentos para evitar loops
+        { maxRetries: 2, enableQueue: false }, // Menos reintentos para evitar loops
+        undefined, // onProgress
+        undefined, // timeSlot (no disponible en operaciones pendientes)
+        undefined // testId (no disponible en operaciones pendientes, usará nombre fallback)
       );
 
       if (result.success) {

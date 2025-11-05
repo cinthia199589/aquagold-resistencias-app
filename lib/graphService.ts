@@ -123,15 +123,16 @@ export const createLotFolder = async (
       "POST",
       JSON.stringify({
         name: lotNumber,
-        folder: {},
-        "@microsoft.graph.conflictBehavior": "rename" // Si existe, renombra automáticamente
+        folder: {}
+        // ❌ REMOVIDO: "@microsoft.graph.conflictBehavior": "rename" 
+        // ✅ Si ya existe, usar la misma carpeta (no crear carpetas duplicadas)
       })
     );
     console.log(`✅ Carpeta ${lotNumber} creada en OneDrive (${folderName})`);
   } catch (error: any) {
-    // Si ya existe (409), no es un error crítico
+    // Si ya existe (409), no es un error crítico - usar la carpeta existente
     if (error.message.includes("nameAlreadyExists") || error.message.includes("409")) {
-      console.log(`ℹ️ Carpeta ${lotNumber} ya existe, se usará la existente`);
+      console.log(`ℹ️ Carpeta ${lotNumber} ya existe, reutilizando la misma carpeta para múltiples resistencias`);
       return;
     }
     console.error(`❌ Error al crear carpeta en OneDrive:`, error);
@@ -316,8 +317,9 @@ const ensureLotFolderExists = async (
         console.log(`📁 Creando carpeta raíz: ${folderName}`);
         const createFolderBody = {
           name: folderName,
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
+          folder: {}
+          // ❌ REMOVIDO: "@microsoft.graph.conflictBehavior": "rename"
+          // ✅ Si ya existe, usar la misma carpeta (no crear carpetas duplicadas)
         };
         await callApi(`/me/drive/root/children`, "POST", createFolderBody);
         console.log(`✅ Carpeta raíz creada: ${folderName}`);
@@ -337,8 +339,9 @@ const ensureLotFolderExists = async (
         const rootFolder = await callApi(`/me/drive/root:/${folderName}`, "GET");
         const createFolderBody = {
           name: lotNumber,
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
+          folder: {}
+          // ❌ REMOVIDO: "@microsoft.graph.conflictBehavior": "rename"
+          // ✅ Si ya existe, usar la misma carpeta (no crear carpetas duplicadas)
         };
         await callApi(`/me/drive/items/${rootFolder.id}/children`, "POST", createFolderBody);
         console.log(`✅ Carpeta de lote creada: ${lotNumber}`);
@@ -359,7 +362,8 @@ export const uploadPhotoToOneDrive = async (
   sampleId: string,
   photoBlob: Blob,
   testType: TestType,
-  timeSlot?: number // 🆕 Hora de la muestra para nombrar la foto
+  timeSlot?: number, // 🆕 Hora de la muestra para nombrar la foto
+  testId?: string // 🆕 ID de la resistencia para nombres únicos
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
   const folderName = getOneDriveFolderByType(testType);
@@ -368,8 +372,13 @@ export const uploadPhotoToOneDrive = async (
     // ✨ FASE 1 FIX: Asegurar que carpetas existen antes de subir
     await ensureLotFolderExists(msalInstance, scopes, folderName, lotNumber);
     
-    // 🆕 Nombrar foto según la hora de la muestra: "Hora 0.jpg", "Hora 2.jpg", etc.
-    const fileName = timeSlot !== undefined ? `Hora ${timeSlot}.jpg` : `foto_${sampleId}.jpg`;
+    // 🆕 Nombrar foto de forma ÚNICA por resistencia: "R{testId}_Hora{timeSlot}.jpg"
+    // Esto evita que fotos de diferentes resistencias del mismo lote se sobrescriban
+    const fileName = (timeSlot !== undefined && testId) 
+      ? `R${testId.slice(-6)}_Hora${timeSlot}.jpg` // Usar últimos 6 chars del testId
+      : timeSlot !== undefined 
+        ? `Hora ${timeSlot}.jpg` // Fallback para compatibilidad
+        : `foto_${sampleId}.jpg`; // Fallback adicional
     const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     console.log(`📤 Iniciando carga de foto: ${fileName}`);
