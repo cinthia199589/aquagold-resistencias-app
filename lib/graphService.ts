@@ -196,7 +196,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: "database",
           folder: {},
-          "@microsoft.graph.conflictBehavior": "fail"
+          "@microsoft.graph.conflictBehavior": "rename"
         })
       );
     }
@@ -212,7 +212,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: "tests",
           folder: {},
-          "@microsoft.graph.conflictBehavior": "fail"
+          "@microsoft.graph.conflictBehavior": "rename"
         })
       );
     }
@@ -228,7 +228,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: month,
           folder: {},
-          "@microsoft.graph.conflictBehavior": "fail"
+          "@microsoft.graph.conflictBehavior": "rename"
         })
       );
     }
@@ -255,39 +255,6 @@ export const saveTestBackupJSON = async (
       jsonPath: "",
       success: false
     };
-  }
-};
-
-/**
- * Elimina el archivo JSON de respaldo de un test desde OneDrive
- */
-export const deleteTestBackupJSON = async (
-  msalInstance: IPublicClientApplication,
-  scopes: string[],
-  testId: string,
-  testDate: string,
-  testType: TestType
-): Promise<boolean> => {
-  const callApi = await getGraphClient(msalInstance, scopes);
-  const folderName = getOneDriveFolderByType(testType);
-  const month = testDate.substring(0, 7); // "2025-11"
-  
-  try {
-    const fileName = `${testId}.json`;
-    const jsonPath = `${folderName}/database/tests/${month}/${fileName}`;
-    const endpoint = `/me/drive/root:/${jsonPath}`;
-    
-    await callApi(endpoint, "DELETE");
-    console.log(`🗑️ JSON de respaldo eliminado: ${jsonPath}`);
-    return true;
-  } catch (error: any) {
-    // Si no existe (404), no es un error crítico
-    if (error.message.includes("404") || error.message.includes("itemNotFound")) {
-      console.log(`ℹ️ JSON ${testId} no existía en OneDrive`);
-      return true;
-    }
-    console.error(`❌ Error al eliminar JSON de respaldo:`, error);
-    return false;
   }
 };
 
@@ -347,15 +314,12 @@ const ensureLotFolderExists = async (
     } catch (e: any) {
       if (e.message?.includes("404") || e.message?.includes("itemNotFound")) {
         console.log(`📁 Creando carpeta raíz: ${folderName}`);
-        await callApi(
-          `/me/drive/root/children`,
-          "POST",
-          JSON.stringify({
-            name: folderName,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "rename"
-          })
-        );
+        const createFolderBody = {
+          name: folderName,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        };
+        await callApi(`/me/drive/root/children`, "POST", createFolderBody);
         console.log(`✅ Carpeta raíz creada: ${folderName}`);
       } else {
         throw e;
@@ -371,15 +335,12 @@ const ensureLotFolderExists = async (
         console.log(`📁 Creando carpeta de lote: ${lotNumber}`);
         // Obtener ID de carpeta raíz
         const rootFolder = await callApi(`/me/drive/root:/${folderName}`, "GET");
-        await callApi(
-          `/me/drive/items/${rootFolder.id}/children`,
-          "POST",
-          JSON.stringify({
-            name: lotNumber,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "rename"
-          })
-        );
+        const createFolderBody = {
+          name: lotNumber,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "rename"
+        };
+        await callApi(`/me/drive/items/${rootFolder.id}/children`, "POST", createFolderBody);
         console.log(`✅ Carpeta de lote creada: ${lotNumber}`);
       } else {
         throw e;
@@ -397,8 +358,7 @@ export const uploadPhotoToOneDrive = async (
   lotNumber: string,
   sampleId: string,
   photoBlob: Blob,
-  testType: TestType,
-  timeSlot?: number // 🆕 NUEVO: Hora para nombrar foto (0, 2, 4, 6, 8, 10, 12)
+  testType: TestType
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
   const folderName = getOneDriveFolderByType(testType);
@@ -407,8 +367,7 @@ export const uploadPhotoToOneDrive = async (
     // ✨ FASE 1 FIX: Asegurar que carpetas existen antes de subir
     await ensureLotFolderExists(msalInstance, scopes, folderName, lotNumber);
     
-    // 🆕 Usar nombre basado en hora si está disponible, sino usar sampleId
-    const fileName = timeSlot !== undefined ? `hora_${timeSlot}.jpg` : `foto_${sampleId}.jpg`;
+    const fileName = `foto_${sampleId}.jpg`;
     const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     console.log(`📤 Iniciando carga de foto: ${fileName}`);
@@ -426,7 +385,7 @@ export const uploadPhotoToOneDrive = async (
     // Subir la nueva foto
     const uploadResponse = await callApi(uploadEndpoint, "PUT", photoBlob, "image/jpeg");
     
-    // ✨ VALIDACIÓN ROBUSTA: Verificar que la respuesta tiene los datos esperados
+    // ✨ FASE 1 FIX: Validar que la respuesta tiene los datos esperados
     if (!uploadResponse || !uploadResponse.id) {
       console.error(`❌ Respuesta inválida de OneDrive:`, uploadResponse);
       throw new Error(`OneDrive devolvió respuesta inválida (sin ID de archivo)`);
@@ -442,26 +401,6 @@ export const uploadPhotoToOneDrive = async (
     console.log(`   URL: ${uploadResponse.webUrl}`);
     console.log(`   Tamaño: ${uploadResponse.size} bytes`);
     
-    // 🆕 ESPERAR 2 SEGUNDOS para que OneDrive procese el archivo
-    // Esto previene el error 404 cuando se accede inmediatamente después
-    console.log(`⏳ Esperando confirmación de OneDrive...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // 🆕 VERIFICAR que el archivo es accesible antes de retornar
-    try {
-      const verifyEndpoint = `/me/drive/items/${uploadResponse.id}`;
-      const verifyResponse = await callApi(verifyEndpoint, "GET");
-      
-      if (!verifyResponse || !verifyResponse.id) {
-        throw new Error('No se pudo verificar el archivo en OneDrive');
-      }
-      
-      console.log(`✅ Archivo verificado y accesible en OneDrive`);
-    } catch (verifyError: any) {
-      console.error(`⚠️ Advertencia: No se pudo verificar acceso al archivo:`, verifyError);
-      // No fallar aquí, pero registrar el problema
-    }
-    
     // Usar directamente webUrl de OneDrive (es más confiable que construirla)
     const photoUrl = uploadResponse.webUrl;
     
@@ -471,36 +410,6 @@ export const uploadPhotoToOneDrive = async (
   } catch (error: any) {
     console.error(`❌ Error al subir foto a OneDrive:`, error);
     throw new Error(`Error al subir foto: ${error.message}`);
-  }
-};
-
-/**
- * Elimina una foto de OneDrive por timeSlot (hora_0.jpg, hora_2.jpg, etc)
- */
-export const deletePhotoFromOneDrive = async (
-  msalInstance: IPublicClientApplication,
-  scopes: string[],
-  lotNumber: string,
-  timeSlot: number,
-  testType: TestType
-): Promise<void> => {
-  const callApi = await getGraphClient(msalInstance, scopes);
-  const folderName = getOneDriveFolderByType(testType);
-  
-  try {
-    const fileName = `hora_${timeSlot}.jpg`;
-    const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}`;
-    
-    await callApi(deleteEndpoint, "DELETE");
-    console.log(`🗑️ Foto eliminada: ${fileName} de ${lotNumber}`);
-  } catch (error: any) {
-    // Si no existe (404), no es un error crítico
-    if (error.message.includes("404") || error.message.includes("itemNotFound")) {
-      console.log(`ℹ️ Foto ${timeSlot} no existía en OneDrive`);
-      return;
-    }
-    console.error(`❌ Error al eliminar foto de OneDrive:`, error);
-    throw error;
   }
 };
 
@@ -566,7 +475,6 @@ export const deleteLotFolderFromOneDrive = async (
   const folderName = getOneDriveFolderByType(testType);
   
   try {
-    // 1. Eliminar carpeta del lote (con fotos)
     const deleteEndpoint = `/me/drive/root:/${folderName}/${lotNumber}`;
     await callApi(deleteEndpoint, "DELETE");
     console.log(`🗑️ Carpeta ${lotNumber} eliminada de OneDrive (${folderName})`);
@@ -574,9 +482,9 @@ export const deleteLotFolderFromOneDrive = async (
     // Si no existe (404), no es un error crítico
     if (error.message.includes("404") || error.message.includes("itemNotFound")) {
       console.log(`ℹ️ Carpeta ${lotNumber} no existía en OneDrive`);
-    } else {
-      console.error(`❌ Error al eliminar carpeta de OneDrive:`, error);
-      throw new Error(`Error al eliminar carpeta: ${error.message}`);
+      return;
     }
+    console.error(`❌ Error al eliminar carpeta de OneDrive:`, error);
+    throw new Error(`Error al eliminar carpeta: ${error.message}`);
   }
 };

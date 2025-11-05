@@ -15,7 +15,7 @@ import {
   loadTestsHybridDual,
   saveTestHybridDual
 } from '../lib/firestoreService';
-import { getAllTestsLocally, updateTestLocally } from '../lib/localStorageService';
+import { getAllTestsLocally } from '../lib/localStorageService';
 import { 
   createLotFolder, 
   saveExcelToOneDrive, 
@@ -279,8 +279,8 @@ const ResistanceTestList = ({
 
   const handleDelete = async (test: ResistanceTest) => {
     try {
-      await deleteTest(test.id, test.lotNumber, test.testType, instance, loginRequest.scopes, test.date);
-      alert('✅ Resistencia eliminada exitosamente (incluyendo archivos y JSON de OneDrive)');
+      await deleteTest(test.id, test.lotNumber, test.testType, instance, loginRequest.scopes);
+      alert('✅ Resistencia eliminada exitosamente (incluyendo archivos de OneDrive)');
       onRefresh();
     } catch (error: any) {
       alert(`❌ Error al eliminar: ${error.message}`);
@@ -424,36 +424,6 @@ const ResistanceTestList = ({
                                 );
                               })}
                             </div>
-                            
-                            {/* Próxima foto pendiente */}
-                            {(() => {
-                              const nextPendingSample = test.samples.find(s => {
-                                const isComplete = s.photoUrl && s.photoUrl.trim() !== '' && 
-                                                  s.rawUnits !== undefined && s.rawUnits !== null &&
-                                                  s.cookedUnits !== undefined && s.cookedUnits !== null;
-                                return !isComplete;
-                              });
-                              
-                              if (nextPendingSample) {
-                                const [startHours, startMinutes] = test.startTime.split(':').map(Number);
-                                const [year, month, day] = test.date.split('-').map(Number);
-                                const startTime = new Date(year, month - 1, day, startHours, startMinutes, 0, 0);
-                                const sampleScheduleTime = new Date(startTime);
-                                sampleScheduleTime.setHours(sampleScheduleTime.getHours() + nextPendingSample.timeSlot);
-                                const now = new Date();
-                                const minutesRemaining = Math.max(0, Math.ceil((sampleScheduleTime.getTime() - now.getTime()) / 60000));
-                                
-                                return (
-                                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
-                                    <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
-                                      📸 Próxima foto: <strong>Hora {formatTimeSlot ? formatTimeSlot(test.startTime, nextPendingSample.timeSlot) : nextPendingSample.timeSlot}</strong>
-                                      {minutesRemaining > 0 ? ` en ${minutesRemaining} min` : ' (¡Ya!)'}
-                                    </p>
-                                  </div>
-                                );
-                              }
-                              return null;
-                            })()}
                           </div>
                         </div>
                       </div>
@@ -671,32 +641,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [currentTime, setCurrentTime] = useState(new Date()); // 🆕 Para actualizar cada minuto
   
   // Estados locales para campos de texto que aceptan decimales
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
   const [so2BfText, setSo2BfText] = useState<string>(test.so2Bf?.toString() || '');
-
-  // 🆕 NUEVO: Actualizar reloj cada minuto para detectar nuevas muestras habilitadas
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000); // Actualizar cada minuto
-    
-    return () => clearInterval(timer);
-  }, []);
-
-  // 🔄 CRÍTICO: Actualizar editedTest cuando el test prop cambie (ej: después de guardar unidades)
-  React.useEffect(() => {
-    console.log('🔄 Test prop cambió, actualizando editedTest con:', test);
-    setEditedTest({
-      ...test,
-      samples: test.samples || []
-    });
-    // También actualizar campos de texto
-    setSo2ResidualsText(test.so2Residuals?.toString() || '');
-    setSo2BfText(test.so2Bf?.toString() || '');
-  }, [test]); // Reaccionar a CUALQUIER cambio en test (React compara por referencia)
 
   // 🆕 Estado para modal de confirmación de eliminación
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -713,29 +661,22 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const { status: autoSaveStatus, markAsSaved } = useAutoSave({
     data: {
       ...editedTest,
-      // ✅ CRÍTICO: MANTENER rawUnits y cookedUnits para que no se borren
-      // Solo excluirlas del monitoreo de cambios, pero SIEMPRE guardarlas
+      // Excluir unidades del auto-guardado (se guardan manualmente con sistema confiable)
       samples: editedTest.samples.map(s => ({
-        id: s.id,
-        timeSlot: s.timeSlot,
-        photoUrl: s.photoUrl,
-        // ✅ MANTENER las unidades (crítico)
-        rawUnits: s.rawUnits,
-        cookedUnits: s.cookedUnits
+        ...s,
+        rawUnits: undefined, // Excluido del auto-guardado
+        cookedUnits: undefined // Excluido del auto-guardado
       }))
     },
     onSave: async () => {
-      // ⚠️ CRÍTICO: Guardar el editedTest COMPLETO con todas las unidades
       if (saveTestFn) {
         await saveTestFn(editedTest);
       } else {
         await saveTestToFirestore(editedTest);
       }
-      // ❌ NO recargar todos los tests después de cada auto-guardado
-      // onTestUpdated(); 
-      console.log('💾 Auto-guardado completado (con unidades)');
+      onTestUpdated(); // Actualizar lista en dashboard
     },
-    delay: 2000, // 2 segundos para evitar guardados excesivos
+    delay: 0, // Guardado inmediato después de cualquier cambio
     enabled: !test.isCompleted // Solo si NO está completada
   });
 
@@ -750,84 +691,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     }
   };
 
-  // 🆕 Calcular si una muestra debe estar habilitada (liberación progresiva cada 2 horas)
-  const isSampleEnabled = (sampleTimeSlot: number): boolean => {
-    try {
-      const [startHours, startMinutes] = test.startTime.split(':').map(Number);
-      const now = new Date();
-      
-      // Parsear la fecha de inicio (YYYY-MM-DD) + hora (HH:mm)
-      const [year, month, day] = test.date.split('-').map(Number);
-      const startTime = new Date(year, month - 1, day, startHours, startMinutes, 0, 0);
-      
-      // Hora en que debería habilitarse esta muestra (startTime + timeSlot en horas)
-      const sampleScheduleTime = new Date(startTime);
-      sampleScheduleTime.setHours(sampleScheduleTime.getHours() + sampleTimeSlot);
-      
-      // La muestra se habilita cuando la hora actual >= hora programada
-      console.log(`🕐 [isSampleEnabled] timeSlot=${sampleTimeSlot}, startTime=${startTime.toLocaleString()}, scheduleTime=${sampleScheduleTime.toLocaleString()}, now=${now.toLocaleString()}, enabled=${now >= sampleScheduleTime}`);
-      return now >= sampleScheduleTime;
-    } catch (error) {
-      console.error('❌ Error en isSampleEnabled:', error);
-      return true; // Si hay error, habilitar para no bloquear
-    }
-  };
-
-  // 🆕 Calcular la próxima muestra que se habilitará (para la notificación)
-  const getNextEnabledSample = (): number | null => {
-    for (const sample of editedTest.samples) {
-      if (!isSampleEnabled(sample.timeSlot)) {
-        return sample.timeSlot;
-      }
-    }
-    return null;
-  };
-
-  // 🆕 Calcular minutos hasta que se habilite la próxima muestra
-  const getMinutesUntilNextSample = (): number => {
-    try {
-      const [startHours, startMinutes] = test.startTime.split(':').map(Number);
-      const now = new Date();
-      const nextSlot = getNextEnabledSample();
-      
-      if (nextSlot === null) return 0; // Todas habilitadas
-      
-      const startTime = new Date();
-      startTime.setHours(startHours, startMinutes, 0, 0);
-      
-      const nextSampleTime = new Date(startTime);
-      nextSampleTime.setHours(startHours + nextSlot, startMinutes, 0, 0);
-      
-      const diffMs = nextSampleTime.getTime() - now.getTime();
-      return Math.max(0, Math.ceil(diffMs / 60000)); // Convertir a minutos
-    } catch {
-      return 0;
-    }
-  };
-
   const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
     // Actualizar estado local inmediatamente para feedback visual
-    const updatedSamples = editedTest.samples.map(s => {
-      if (s.id === sampleId) {
-        const updatedSample = { ...s, [field]: value };
-        console.log(`🔄 Actualizando muestra ${sampleId}:`, {
-          rawUnits: updatedSample.rawUnits,
-          cookedUnits: updatedSample.cookedUnits,
-          hasPhoto: Boolean(updatedSample.photoUrl),
-          isComplete: updatedSample.rawUnits !== undefined && 
-                     updatedSample.rawUnits !== null && 
-                     updatedSample.cookedUnits !== undefined && 
-                     updatedSample.cookedUnits !== null && 
-                     updatedSample.photoUrl
-        });
-        return updatedSample;
-      }
-      return s;
-    });
-    
     const updatedTest = {
       ...editedTest,
-      samples: updatedSamples
+      samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, [field]: value } : s)
     };
     setEditedTest(updatedTest);
 
@@ -845,20 +713,16 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       );
 
       if (result.success) {
-        // ✅ Actualizar también el cache local para que el progreso se vea inmediatamente
-        try {
-          await updateTestLocally(updatedTest);
-          console.log(`✅ Unidad ${field} guardada y actualizada localmente para muestra ${sampleId}`);
-        } catch (localError) {
-          console.warn('⚠️ No se pudo actualizar cache local:', localError);
-        }
+        // Actualizar lista en dashboard
+        onTestUpdated();
+        console.log(`✅ Unidad ${field} guardada exitosamente para muestra ${sampleId}`);
       } else {
         console.error('❌ Error al guardar unidad:', result.errors);
-        alert(`⚠️ Error al guardar: ${result.errors?.join(', ')}`);
+        // Aquí podríamos mostrar una notificación de error al usuario
       }
     } catch (error) {
       console.error('❌ Error crítico al guardar unidad:', error);
-      alert(`❌ Error al guardar unidad. Los datos se guardarán cuando vuelva la conexión.`);
+      // Aquí podríamos mostrar una notificación de error al usuario
     } finally {
       // Limpiar progreso después de un tiempo
       setTimeout(() => setUnitSaveProgress(null), 3000);
@@ -884,8 +748,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
   const confirmDelete = async () => {
     if (deleteConfirm.sampleId) {
-      const sampleToDelete = editedTest.samples.find(s => s.id === deleteConfirm.sampleId);
-      
       const updatedTest = {
         ...editedTest,
         samples: editedTest.samples.filter(s => s.id !== deleteConfirm.sampleId)
@@ -897,38 +759,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         await saveTestFn(updatedTest);
       } else {
         await saveTestToFirestore(updatedTest);
-      }
-
-      // 🆕 IMPORTANTE: Eliminar foto de OneDrive si existe
-      if (sampleToDelete?.photoUrl && instance) {
-        try {
-          const { deletePhotoFromOneDrive } = await import('../lib/graphService');
-          if (sampleToDelete.timeSlot !== undefined) {
-            await deletePhotoFromOneDrive(
-              instance,
-              loginRequest.scopes,
-              editedTest.lotNumber,
-              sampleToDelete.timeSlot,
-              editedTest.testType
-            );
-            console.log(`✅ Foto de muestra hora ${sampleToDelete.timeSlot} eliminada`);
-          }
-        } catch (photoError) {
-          console.warn('⚠️ No se pudo eliminar foto de OneDrive:', photoError);
-          // No bloquear el flujo
-        }
-      }
-
-      // 🆕 IMPORTANTE: Actualizar JSON en OneDrive para eliminar la muestra
-      try {
-        const { saveTestBackupJSON } = await import('../lib/graphService');
-        if (instance) {
-          await saveTestBackupJSON(instance, loginRequest.scopes, updatedTest);
-          console.log('✅ JSON de respaldo actualizado después de eliminar muestra');
-        }
-      } catch (jsonError) {
-        console.warn('⚠️ No se pudo actualizar JSON de respaldo:', jsonError);
-        // No bloquear el flujo si falla el JSON
       }
 
       // Marcar como guardado para evitar conflictos con auto-guardado
@@ -971,10 +801,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         console.log('🔄 Reemplazando foto anterior...');
       }
 
-      // Obtener timeSlot del sample para nombrar foto
-      const sample = editedTest.samples.find(s => s.id === sampleId);
-      const timeSlot = sample?.timeSlot;
-
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
@@ -994,8 +820,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           maxRetries: 3,
           retryDelay: 2000,
           maxRetryDelay: 15000,
-          compressionQuality: 0.80, // Calidad 80% - Balance óptimo
-          maxFileSize: 3, // 3MB - Buen balance para móviles
+          compressionQuality: 0.8,
+          maxFileSize: 5, // 5MB
           enableLocalBackup: true,
           enableQueue: true
         },
@@ -1005,33 +831,14 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             ...prev,
             [sampleId]: progress
           }));
-        },
-        timeSlot // 🆕 Pasar timeSlot para nombrar archivo hora_0, hora_2, etc.
+        }
       );
 
       if (result.success && result.photoUrl) {
         // Actualizar con URL real y limpiar estado de carga
-        const updatedSamples = editedTest.samples.map(s => {
-          if (s.id === sampleId) {
-            const updatedSample = { ...s, photoUrl: result.photoUrl, isUploading: false };
-            console.log(`📸 Foto subida para muestra ${sampleId}:`, {
-              rawUnits: updatedSample.rawUnits,
-              cookedUnits: updatedSample.cookedUnits,
-              hasPhoto: Boolean(updatedSample.photoUrl),
-              isComplete: updatedSample.rawUnits !== undefined && 
-                         updatedSample.rawUnits !== null && 
-                         updatedSample.cookedUnits !== undefined && 
-                         updatedSample.cookedUnits !== null && 
-                         updatedSample.photoUrl
-            });
-            return updatedSample;
-          }
-          return s;
-        });
-        
         const updatedTest = {
           ...editedTest,
-          samples: updatedSamples
+          samples: editedTest.samples.map(s => s.id === sampleId ? { ...s, photoUrl: result.photoUrl, isUploading: false } : s)
         };
 
         setEditedTest(updatedTest);
@@ -1131,9 +938,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   };
 
   const handleComplete = async () => {
-    console.log('🔍 VALIDACIÓN INICIADA - handleComplete()');
-    console.log('📊 editedTest.samples:', editedTest.samples);
-    
     // Verificar que la instancia MSAL esté disponible
     if (!instance) {
       alert("❌ La sesión no está activa. Por favor, recarga la página.");
@@ -1148,49 +952,17 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       return;
     }
 
-    // Validar que TODAS las fotos y unidades estén completas
-    // Debe estar 100% completo para poder marcar como completado
+    // Validar que todas las fotos estén tomadas
     const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
-    
-    console.log('🔍 Samples totales:', editedTest.samples.length);
-    console.log('🔍 Samples sin foto:', samplesWithoutPhoto.length, samplesWithoutPhoto);
-    console.log('🔍 Samples sin rawUnits:', samplesWithoutRawUnits.length, samplesWithoutRawUnits);
-    console.log('🔍 Samples sin cookedUnits:', samplesWithoutCookedUnits.length, samplesWithoutCookedUnits);
-    
-    const missingItems = [];
     
     if (samplesWithoutPhoto.length > 0) {
       const missingHours = samplesWithoutPhoto.map(sample => 
         formatTimeSlot(editedTest.startTime, sample.timeSlot)
       ).join(', ');
-      missingItems.push(`• Fotos en las horas: ${missingHours}`);
-    }
-    
-    if (samplesWithoutRawUnits.length > 0) {
-      const missingHours = samplesWithoutRawUnits.map(sample => 
-        formatTimeSlot(editedTest.startTime, sample.timeSlot)
-      ).join(', ');
-      missingItems.push(`• Unidades en crudo en las horas: ${missingHours}`);
-    }
-    
-    if (samplesWithoutCookedUnits.length > 0) {
-      const missingHours = samplesWithoutCookedUnits.map(sample => 
-        formatTimeSlot(editedTest.startTime, sample.timeSlot)
-      ).join(', ');
-      missingItems.push(`• Unidades cocidas en las horas: ${missingHours}`);
-    }
-    
-    console.log('🔍 Items faltantes:', missingItems);
-    
-    if (missingItems.length > 0) {
-      console.log('⚠️ VALIDACIÓN FALLIDA - Mostrando alerta');
-      alert(`⚠️ No se puede completar la resistencia. Faltan completar:\n\n${missingItems.join('\n')}\n\nPor favor complete todos los datos antes de finalizar.`);
+      
+      alert(`⚠️ No se puede completar la prueba. Faltan fotos en las siguientes horas:\n${missingHours}\n\nPor favor tome todas las fotos antes de completar.`);
       return;
     }
-    
-    console.log('✅ VALIDACIÓN EXITOSA - Continuando con completar...');
 
     if (!confirm('¿Está seguro de marcar esta resistencia como completada? Se generará y guardará el reporte Excel automáticamente.')) {
       return;
@@ -1223,11 +995,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       alert('✅ Resistencia completada y reporte guardado en OneDrive');
       onTestUpdated();
-      
-      // Volver al dashboard después de 1 segundo
-      setTimeout(() => {
-        setRoute('dashboard');
-      }, 1000);
     } catch (error: any) {
       alert(`❌ Error: ${error.message}`);
     } finally {
@@ -1333,34 +1100,18 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <span className="text-gray-600 dark:text-gray-400">
                       📷 Fotos: {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length}/{editedTest.samples.length}
                     </span>
-                    {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length === editedTest.samples.length ? (
+                    {editedTest.samples.filter(s => s.photoUrl && s.photoUrl.trim() !== '').length === editedTest.samples.length && (
                       <span className="text-green-600 font-medium">✓</span>
-                    ) : (
-                      <span className="text-red-500 font-medium">✗</span>
                     )}
                   </div>
                   
-                  {/* Indicador de unidades en crudo */}
+                  {/* Indicador de datos */}
                   <div className="flex items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400">
-                      🥩 Crudo: {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null).length}/{editedTest.samples.length}
+                      📊 Datos: {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null && s.cookedUnits !== undefined && s.cookedUnits !== null).length}/{editedTest.samples.length}
                     </span>
-                    {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null).length === editedTest.samples.length ? (
+                    {editedTest.samples.filter(s => s.rawUnits !== undefined && s.rawUnits !== null && s.cookedUnits !== undefined && s.cookedUnits !== null).length === editedTest.samples.length && (
                       <span className="text-green-600 font-medium">✓</span>
-                    ) : (
-                      <span className="text-red-500 font-medium">✗</span>
-                    )}
-                  </div>
-                  
-                  {/* Indicador de unidades cocidas */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      🍤 Cocido: {editedTest.samples.filter(s => s.cookedUnits !== undefined && s.cookedUnits !== null).length}/{editedTest.samples.length}
-                    </span>
-                    {editedTest.samples.filter(s => s.cookedUnits !== undefined && s.cookedUnits !== null).length === editedTest.samples.length ? (
-                      <span className="text-green-600 font-medium">✓</span>
-                    ) : (
-                      <span className="text-red-500 font-medium">✗</span>
                     )}
                   </div>
                   
@@ -1394,34 +1145,14 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   <Save size={16} className="mr-2"/>
                   {isSaving ? 'Guardando...' : 'Guardar'}
                 </Button>
-                <div title={(() => {
-                    // Verificar TODAS las muestras - debe estar 100% completo
-                    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-                    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-                    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
-                    
-                    const missingItems = [];
-                    if (samplesWithoutPhoto.length > 0) missingItems.push('fotos');
-                    if (samplesWithoutRawUnits.length > 0) missingItems.push('unidades en crudo');
-                    if (samplesWithoutCookedUnits.length > 0) missingItems.push('unidades cocidas');
-                    
-                    return missingItems.length > 0 
-                      ? `Faltan: ${missingItems.join(', ')}. Complete TODOS los datos de TODAS las horas para poder finalizar.`
-                      : 'Completar prueba y generar reporte Excel';
-                  })()}>
+                <div title={editedTest.samples.some(sample => !sample.photoUrl || sample.photoUrl.trim() === '') ? 
+                    'Faltan fotos por tomar. Complete todas las fotos para poder finalizar.' : 
+                    'Completar prueba y generar reporte Excel'
+                  }>
                   <Button 
                     className="h-11 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" 
                     onClick={handleComplete} 
-                    disabled={isCompleting || 
-                      editedTest.samples.some(sample => 
-                        !sample.photoUrl || 
-                        sample.photoUrl.trim() === '' ||
-                        sample.rawUnits === undefined || 
-                        sample.rawUnits === null ||
-                        sample.cookedUnits === undefined || 
-                        sample.cookedUnits === null
-                      )
-                    }
+                    disabled={isCompleting || editedTest.samples.some(sample => !sample.photoUrl || sample.photoUrl.trim() === '')}
                   >
                     <CheckCircle size={16} className="mr-2"/>
                     {isCompleting ? 'Completando...' : 'Completar'}
@@ -1569,46 +1300,28 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
           {(editedTest.samples || []).map(sample => {
-            // Determinar si la muestra está completa (verificar CADA campo)
-            const hasPhoto = Boolean(sample.photoUrl && sample.photoUrl.trim() !== '');
-            const hasRawUnits = sample.rawUnits !== undefined && sample.rawUnits !== null;
-            const hasCookedUnits = sample.cookedUnits !== undefined && sample.cookedUnits !== null;
-            const isComplete = hasPhoto && hasRawUnits && hasCookedUnits;
-            
-            // Clases separadas para mejor detección de cambios
-            const cardClasses = [
-              "w-full",
-              "shadow-lg",
-              "hover:shadow-xl",
-              "transition-all",
-              "duration-300",
-              "rounded-lg",
-              "border-4",
-              isComplete ? "border-green-500" : "border-gray-300",
-              isComplete ? "dark:border-green-400" : "dark:border-gray-600",
-              isComplete ? "bg-green-50" : "bg-white",
-              isComplete ? "dark:bg-green-950" : "dark:bg-slate-800",
-              isComplete ? "ring-4" : "",
-              isComplete ? "ring-green-200" : "",
-              isComplete ? "dark:ring-green-900" : ""
-            ].filter(Boolean).join(" ");
+            // Determinar si la muestra está completa
+            const isComplete = sample.rawUnits !== undefined && sample.rawUnits !== null && 
+                              sample.cookedUnits !== undefined && sample.cookedUnits !== null && 
+                              sample.photoUrl && sample.photoUrl.trim() !== '';
             
             return (
-            <Card key={`${sample.id}-${isComplete}`} className={cardClasses}>
+            <Card key={sample.id} className={`w-full border-2 bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all rounded-lg ${
+              isComplete 
+                ? 'border-green-400 dark:border-green-500' 
+                : 'border-amber-300 dark:border-amber-500'
+            }`}>
               <CardHeader className={`pb-1 p-2 sm:p-3 rounded-t-lg bg-gradient-to-r ${
                 isComplete 
-                  ? 'from-green-600 to-green-700 dark:from-green-700 dark:to-green-800' 
-                  : 'from-gray-500 to-gray-600 dark:from-gray-600 dark:to-gray-700'
+                  ? 'from-green-500 to-green-600 dark:from-green-600 dark:to-green-700' 
+                  : 'from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700'
               }`}>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-white font-semibold text-xs sm:text-base flex items-center gap-2">
+                  <CardTitle className="text-white font-semibold text-xs sm:text-base">
                     🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}
-                    {isComplete && <span className="text-lg">✅</span>}
                   </CardTitle>
-                  <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full text-white font-bold ${
-                    isComplete ? 'bg-green-800' : 'bg-gray-700'
-                  }`}>
-                    {isComplete ? '✓ COMPLETO' : '⏳ Pendiente'}
+                  <span className="text-[10px] sm:text-xs bg-white/20 px-2 py-0.5 rounded-full text-white font-medium">
+                    {isComplete ? '✓ Listo' : 'Pendiente'}
                   </span>
                 </div>
               </CardHeader>
@@ -1941,8 +1654,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     return;
                   }
                   try {
-                    await deleteTest(editedTest.id, editedTest.lotNumber, editedTest.testType, instance, loginRequest.scopes, editedTest.date);
-                    alert('✅ Resistencia eliminada completamente (Firestore + OneDrive + JSON)');
+                    await deleteTest(editedTest.id, editedTest.lotNumber, editedTest.testType, instance, loginRequest.scopes);
+                    alert('✅ Resistencia eliminada completamente (Firestore + OneDrive)');
                     onTestUpdated();
                     setRoute('dashboard');
                   } catch (error: any) {
@@ -1977,15 +1690,9 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   
-  // 💾 PERSISTENTE: El modo se carga INMEDIATAMENTE desde localStorage para evitar parpadeo
-  const [workMode, setWorkMode] = useState<TestType>(() => {
-    if (typeof window !== 'undefined') {
-      const savedMode = localStorage.getItem('workMode') as TestType | null;
-      console.log(`🔄 Inicializando workMode desde localStorage: ${savedMode || 'MATERIA_PRIMA (default)'}`);
-      return savedMode || 'MATERIA_PRIMA';
-    }
-    return 'MATERIA_PRIMA';
-  });
+  // 💾 PERSISTENTE: El modo se guarda en localStorage
+  const [workMode, setWorkMode] = useState<TestType>('MATERIA_PRIMA');
+  const [workModeSaved, setWorkModeSaved] = useState(false);
   
   // ✅ NUEVO: Infinite scroll - Mostrar 30 inicialmente
   const [visibleCount, setVisibleCount] = useState(30);
@@ -2037,13 +1744,24 @@ const DashboardPage = () => {
     }
   };
 
-  // 💾 PERSISTENCIA: Guardar modo cuando cambie
+  // 💾 PERSISTENCIA: Cargar modo guardado y guardar cuando cambie
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('workMode', workMode);
-      console.log(`💾 Modo guardado: ${workMode}`);
+    // Al montar: cargar modo guardado
+    if (typeof window !== 'undefined' && !workModeSaved) {
+      const savedMode = localStorage.getItem('workMode') as TestType | null;
+      if (savedMode) {
+        setWorkMode(savedMode);
+      }
+      setWorkModeSaved(true);
     }
-  }, [workMode]);
+  }, [workModeSaved]);
+
+  // Guardar modo cuando cambie
+  useEffect(() => {
+    if (workModeSaved && typeof window !== 'undefined') {
+      localStorage.setItem('workMode', workMode);
+    }
+  }, [workMode, workModeSaved]);
 
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
@@ -2084,7 +1802,7 @@ const DashboardPage = () => {
       console.log(`🔄 Re-filtrando tests porque workMode cambió a: ${workMode}`);
       filterTests(allTests, showAll);
     }
-  }, [workMode]); // ← Se ejecuta cada vez que workMode cambia
+  }, [workMode, showAll]); // ← Se ejecuta cada vez que workMode o showAll cambian
   
   // 🔄 NUEVO: Función helper para guardado dual (híbrido + legacy)
   const saveTestDual = async (test: ResistanceTest) => {
@@ -2287,31 +2005,6 @@ const DashboardPage = () => {
     }
   }, [wasOffline]); // Se ejecuta cuando wasOffline cambia a true
 
-  // 🔄 NUEVO: Escuchar evento de actualización de tests para refrescar UI inmediatamente
-  useEffect(() => {
-    const handleTestUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent<{ testId: string; test: ResistanceTest }>;
-      console.log('🔔 Evento testUpdated recibido:', customEvent.detail.testId);
-      
-      // Actualizar la lista de tests con el test modificado (crear NUEVA referencia)
-      setAllTests(prevTests => {
-        const updatedTests = prevTests.map(t => 
-          t.id === customEvent.detail.testId 
-            ? { ...customEvent.detail.test } // ✅ Crear nueva referencia para que React detecte el cambio
-            : t
-        );
-        // Re-filtrar para actualizar la UI
-        filterTests(updatedTests, showAll);
-        return updatedTests;
-      });
-    };
-
-    window.addEventListener('testUpdated', handleTestUpdate);
-    return () => {
-      window.removeEventListener('testUpdated', handleTestUpdate);
-    };
-  }, [showAll]); // Dependencia de showAll para que filterTests tenga el valor correcto
-
   const handleSetRoute = (newRoute: string, params: any = null) => {
     setRoute(newRoute);
     setRouteParams(params);
@@ -2323,9 +2016,7 @@ const DashboardPage = () => {
         return <NewTestPage setRoute={handleSetRoute} onTestCreated={loadAllTests} saveTestFn={saveTestDual} workMode={workMode} />;
       case 'test-detail':
         const test = tests.find(t => t.id === routeParams.id);
-        // ✅ Crear key único con contenido del test para forzar re-render cuando cambie
-        const testKey = test ? `${test.id}-${JSON.stringify(test.samples.map(s => ({r: s.rawUnits, c: s.cookedUnits, p: s.photoUrl})))}` : 'no-test';
-        if (test) return <TestDetailPage key={testKey} test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
+        if (test) return <TestDetailPage test={test} setRoute={handleSetRoute} onTestUpdated={loadAllTests} saveTestFn={saveTestDual} />;
         return <p>Test no encontrado</p>;
       default:
         return <ResistanceTestList setRoute={handleSetRoute} tests={tests} isLoading={isLoading} onRefresh={loadAllTests} onSearch={handleSearch} showAll={showAll} setShowAll={setShowAll} instance={instance} accounts={accounts} visibleCount={visibleCount} loadMoreTests={loadMoreTests} showSearchInFirestore={showSearchInFirestore} searchInFullHistory={searchInFullHistory} isSearching={isSearching} />;

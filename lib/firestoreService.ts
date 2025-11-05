@@ -11,7 +11,7 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { ResistanceTest } from './types';
+import { ResistanceTest, DualSaveResult } from './types';
 import { saveTestBackupJSON, loadTestFromJSON } from './graphService';
 import { 
   saveTestLocally, 
@@ -541,8 +541,7 @@ export const deleteTest = async (
   lotNumber?: string, 
   testType?: import('./types').TestType,
   msalInstance?: any,
-  scopes?: string[],
-  testDate?: string
+  scopes?: string[]
 ): Promise<void> => {
   // Eliminar de local primero (siempre)
   try {
@@ -569,23 +568,15 @@ export const deleteTest = async (
     // No lanzar error - el test ya fue eliminado localmente
   }
 
-  // Intentar eliminar de OneDrive si se proporcionan los datos
+  // Intentar eliminar carpeta de OneDrive si se proporcionan los datos
   if (lotNumber && testType && msalInstance && scopes) {
     try {
-      // 1. Eliminar carpeta del lote (con fotos)
       const { deleteLotFolderFromOneDrive } = await import('./graphService');
       await deleteLotFolderFromOneDrive(msalInstance, scopes, lotNumber, testType);
       console.log(`✅ Carpeta ${lotNumber} eliminada de OneDrive`);
-      
-      // 2. Eliminar JSON de respaldo si se proporciona la fecha
-      if (testDate) {
-        const { deleteTestBackupJSON } = await import('./graphService');
-        await deleteTestBackupJSON(msalInstance, scopes, testId, testDate, testType);
-        console.log(`✅ JSON de respaldo ${testId} eliminado de OneDrive`);
-      }
     } catch (oneDriveError: any) {
       console.error('❌ Error al eliminar de OneDrive:', oneDriveError);
-      console.warn('⚠️ Test eliminado de Firestore, pero no completamente de OneDrive');
+      console.warn('⚠️ Test eliminado de Firestore, pero no de OneDrive');
       // No lanzar error - el test ya fue eliminado de Firestore
     }
   } else {
@@ -645,8 +636,7 @@ export const syncPendingData = async (): Promise<number> => {
 // ============================================
 
 import { 
-  ResistanceTestIndex, 
-  DualSaveResult 
+  ResistanceTestIndex 
 } from './types';
 
 /**
