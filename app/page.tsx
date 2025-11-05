@@ -384,7 +384,9 @@ const ResistanceTestList = ({
                       <div className="text-3xl">⏳</div>
                       <div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">Tests Activos</div>
-                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{tests.filter(t => !t.isCompleted).length}</div>
+                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                          {tests.filter(t => !t.isCompleted).length}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm">
@@ -423,7 +425,9 @@ const ResistanceTestList = ({
                   <div className="hidden lg:flex lg:gap-4">
                     {/* COLUMNA IZQUIERDA - Lista de Tests (35%) */}
                     <div className="lg:w-[35%] space-y-2 overflow-y-auto max-h-[70vh]">
-                      {tests.slice(0, visibleCount).map(test => (
+                      {tests
+                        .slice(0, visibleCount)
+                        .map(test => (
                         <div 
                           key={test.id} 
                           className={`border-2 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-all cursor-pointer ${
@@ -559,7 +563,9 @@ const ResistanceTestList = ({
 
                   {/* 📱 GRID MOBILE/TABLET - Vista Original */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden gap-2">
-                    {tests.slice(0, visibleCount).map(test => (
+                    {tests
+                      .slice(0, visibleCount)
+                      .map(test => (
                       <div 
                         key={test.id} 
                         className="border-2 border-gray-600 dark:border-gray-600 rounded p-2 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer relative card-mobile"
@@ -874,6 +880,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date()); // Estado para tiempo actual
   const [selectedImageModal, setSelectedImageModal] = useState<{url: string, alt: string, rotation?: number} | null>(null);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set()); // 🆕 Trackear errores de imagen
   
   // Estados locales para campos de texto que aceptan decimales
   const [so2ResidualsText, setSo2ResidualsText] = useState<string>(test.so2Residuals?.toString() || '');
@@ -1155,15 +1162,20 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Marcar como subiendo
       setUploadingPhotos(prev => new Set([...prev, sampleId]));
 
+      // Obtener información de la muestra actual
+      const currentSample = editedTest.samples.find(s => s.id === sampleId);
+      
       // Limpiar URL anterior si existe (para evitar cache del navegador)
-      const previousSample = editedTest.samples.find(s => s.id === sampleId);
-      if (previousSample?.photoUrl) {
+      if (currentSample?.photoUrl) {
         console.log('🔄 Reemplazando foto anterior...');
+        // Limpiar el blob URL anterior si existe para evitar memory leaks
+        if (currentSample.photoUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(currentSample.photoUrl);
+        }
       }
 
       // Obtener el timeSlot de la muestra para nombrar la foto
-      const sample = editedTest.samples.find(s => s.id === sampleId);
-      const timeSlot = sample?.timeSlot ?? 0;
+      const timeSlot = currentSample?.timeSlot ?? 0;
 
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
@@ -1210,8 +1222,24 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       );
 
       if (result.success && result.photoUrl) {
+        // Limpiar errores de imagen si existían
+        setImageErrors(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(sampleId);
+          return newSet;
+        });
+        
+        // Limpiar el blob URL temporal antes de actualizar
+        if (currentSample?.photoUrl && currentSample.photoUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(currentSample.photoUrl);
+        }
+        
+        // Validar que la URL de OneDrive es válida
+        if (!result.photoUrl || result.photoUrl.trim() === '') {
+          throw new Error('URL de foto inválida recibida de OneDrive');
+        }
+        
         // Actualizar con URL real y limpiar estado de carga, mantener rotación automática
-        const currentSample = editedTest.samples.find(s => s.id === sampleId);
         const updatedTest = {
           ...editedTest,
           samples: editedTest.samples.map(s => s.id === sampleId ? { 
@@ -1492,37 +1520,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               </CardDescription>
               {!editedTest.isCompleted && (
                 <div className="mt-2 text-xs sm:text-sm space-y-1">
-                  {/* 📸 Banner de próxima foto */}
-                  {(() => {
-                    const nextPending = getNextPendingSample();
-                    if (nextPending) {
-                      const { minutesUntil, timeString } = nextPending;
-                      const isPast = minutesUntil < 0;
-                      const absMinutes = Math.abs(minutesUntil);
-                      
-                      return (
-                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                          isPast ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700' : 
-                          'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700'
-                        }`}>
-                          <span className="text-lg">📸</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">
-                              {isPast ? '⚠️ Foto pendiente' : 'Próxima foto'}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              Hora {timeString} {isPast ? 
-                                `(hace ${absMinutes} min)` : 
-                                `en ${absMinutes} min`
-                              }
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
                   {/* Indicador de fotos */}
                   <div className="flex items-center gap-2">
                     <span className="text-gray-600 dark:text-gray-400">
@@ -1997,7 +1994,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     )}
                   </div>
                   
-                  {sample.photoUrl && (
+                  {sample.photoUrl && !imageErrors.has(sample.id) && (
                     <div className="space-y-1">
                       {/* Vista previa de la imagen - PEQUEÑA y clickeable */}
                       <div 
@@ -2021,9 +2018,26 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                               maxHeight: sample.rotation === 90 || sample.rotation === 270 ? '70%' : '90%'
                             }}
                             onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              target.nextElementSibling?.classList.remove('hidden');
+                              const imgElement = e.target as HTMLImageElement;
+                              const photoUrl = sample.photoUrl || '';
+                              const isBlob = photoUrl.startsWith('blob:');
+                              const errorMsg = isBlob 
+                                ? 'URL temporal (blob) inválida - la foto no se subió correctamente'
+                                : 'Error cargando imagen desde OneDrive';
+                              
+                              console.error(`❌ Error cargando imagen para muestra ${sample.id}:`, {
+                                url: photoUrl,
+                                isBlob,
+                                errorMsg,
+                                imgSrc: imgElement.src
+                              });
+                              
+                              setImageErrors(prev => new Set([...prev, sample.id]));
+                              
+                              // Si es una URL blob, limpiarla inmediatamente
+                              if (isBlob && photoUrl) {
+                                URL.revokeObjectURL(photoUrl);
+                              }
                             }}
                           />
                         </div>
@@ -2085,7 +2099,41 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     </div>
                   )}
                   
-                  {!sample.photoUrl && (
+                  {/* 🚨 ERROR DE IMAGEN - Mostrar cuando hay problema con la foto */}
+                  {sample.photoUrl && imageErrors.has(sample.id) && (
+                    <div className="space-y-2">
+                      <div className="w-full h-16 bg-red-50 border-2 border-red-300 rounded-lg flex items-center justify-center p-2">
+                        <div className="text-center">
+                          <div className="text-red-600 font-bold text-sm mb-1">⚠️ Error al cargar foto</div>
+                          <div className="text-red-500 text-xs">La imagen no se puede mostrar</div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 w-full">
+                        <Button 
+                          className="flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-sm border-0 transition-all"
+                          onClick={() => {
+                            // Limpiar error y permitir que el usuario vuelva a intentar
+                            setImageErrors(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(sample.id);
+                              return newSet;
+                            });
+                            // También limpiar la URL de la muestra para forzar nueva subida
+                            setEditedTest(prev => ({
+                              ...prev,
+                              samples: prev.samples.map(s => s.id === sample.id ? { ...s, photoUrl: '' } : s)
+                            }));
+                          }}
+                          disabled={editedTest.isCompleted}
+                        >
+                          <Camera size={14} className="sm:w-4 sm:h-4" />
+                          <span>Tomar Nueva Foto</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!sample.photoUrl && !imageErrors.has(sample.id) && (
                     <div className="w-full h-16 sm:h-20 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
                       <div className="text-gray-400 text-center">
                         <Camera size={20} className="mx-auto mb-1" />
@@ -2299,6 +2347,7 @@ const DashboardPage = () => {
       // 1. Mostrar cache local INMEDIATAMENTE (funciona offline)
       const cachedTests = await getAllTestsLocally();
       console.log(`📦 ${cachedTests.length} tests cargados desde cache local`);
+      console.log(`📊 workMode actual al cargar: ${workMode}`);
       setAllTests(cachedTests);
       filterTests(cachedTests, showAll);
       setIsLoading(false);  // ✅ UI lista de inmediato
@@ -2308,6 +2357,8 @@ const DashboardPage = () => {
         try {
           // 🔄 SISTEMA DUAL: Lee de índice híbrido + Firebase legacy
           const allTestsHybrid = await loadTestsHybridDual(instance, loginRequest.scopes);
+          console.log(`🌐 ${allTestsHybrid.length} tests sincronizados desde servidor`);
+          console.log(`📊 workMode al sincronizar: ${workMode}`);
           
           setAllTests(allTestsHybrid);
           filterTests(allTestsHybrid, showAll);
@@ -2328,8 +2379,11 @@ const DashboardPage = () => {
     // Al montar: cargar modo guardado
     if (typeof window !== 'undefined' && !workModeSaved) {
       const savedMode = localStorage.getItem('workMode') as TestType | null;
-      if (savedMode) {
+      if (savedMode && (savedMode === 'MATERIA_PRIMA' || savedMode === 'PRODUCTO_TERMINADO')) {
+        console.log(`🔄 Restaurando workMode desde localStorage: ${savedMode}`);
         setWorkMode(savedMode);
+      } else {
+        console.log(`🔄 No hay workMode válido guardado, usando por defecto: MATERIA_PRIMA`);
       }
       setWorkModeSaved(true);
     }
@@ -2338,6 +2392,7 @@ const DashboardPage = () => {
   // Guardar modo cuando cambie
   useEffect(() => {
     if (workModeSaved && typeof window !== 'undefined') {
+      console.log(`💾 Guardando workMode en localStorage: ${workMode}`);
       localStorage.setItem('workMode', workMode);
     }
   }, [workMode, workModeSaved]);
@@ -2345,12 +2400,19 @@ const DashboardPage = () => {
   // Filtrar tests en memoria (MUY RÁPIDO)
   const filterTests = (testsArray: ResistanceTest[], showCompleted: boolean) => {
     console.log(`📊 Filtrando ${testsArray.length} tests para workMode: ${workMode}`);
+    console.log(`📋 Tests disponibles:`, testsArray.map(t => ({ id: t.id, lotNumber: t.lotNumber, testType: t.testType })));
     
     let filtered = testsArray;
     
     // 1️⃣ Filtrar por tipo de resistencia (workMode)
     const beforeTypeFilter = filtered.length;
-    filtered = filtered.filter(t => t.testType === workMode);
+    filtered = filtered.filter(t => {
+      const matches = t.testType === workMode;
+      if (!matches) {
+        console.log(`  ❌ Test ${t.lotNumber} no coincide: ${t.testType} !== ${workMode}`);
+      }
+      return matches;
+    });
     console.log(`  📌 Después de filtro por tipo: ${filtered.length}/${beforeTypeFilter} (workMode: ${workMode})`);
     
     // Mostrar tipos en allTests para depuración
@@ -2367,6 +2429,8 @@ const DashboardPage = () => {
       console.log(`  ✅ Después de filtro completadas: ${filtered.length}/${beforeCompleteFilter}`);
     }
     
+    console.log(`📊 Tests filtrados:`, filtered.map(t => ({ id: t.id, lotNumber: t.lotNumber, testType: t.testType, isCompleted: t.isCompleted })));
+    
     setTests(filtered);
     // ✅ Resetear contador de visibles al filtrar
     setVisibleCount(TESTS_PER_LOAD);
@@ -2379,7 +2443,11 @@ const DashboardPage = () => {
   useEffect(() => {
     if (allTests.length > 0) {
       console.log(`🔄 Re-filtrando tests porque workMode cambió a: ${workMode}`);
+      console.log(`📊 allTests tiene ${allTests.length} tests`);
+      console.log(`📊 showAll es: ${showAll}`);
       filterTests(allTests, showAll);
+    } else {
+      console.log(`⚠️ No hay tests en allTests para filtrar (length: ${allTests.length})`);
     }
   }, [workMode, showAll]); // ← Se ejecuta cada vez que workMode o showAll cambian
   
