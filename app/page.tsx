@@ -1543,7 +1543,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 mb-6 w-full">
-          {(editedTest.samples || []).map(sample => {
+          {(editedTest.samples || [])
+            .filter(sample => isSampleEnabled(sample.timeSlot))
+            .map(sample => {
             // Determinar si la muestra está completa (verificar CADA campo)
             const hasPhoto = Boolean(sample.photoUrl && sample.photoUrl.trim() !== '');
             const hasRawUnits = sample.rawUnits !== undefined && sample.rawUnits !== null;
@@ -1587,17 +1589,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   </span>
                 </div>
               </CardHeader>
-              {!isComplete && !isSampleEnabled(sample.timeSlot) && (
-                <div className="bg-amber-50 dark:bg-amber-950 border-l-4 border-amber-500 px-3 py-2 text-xs sm:text-sm text-amber-800 dark:text-amber-200">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🔔</span>
-                    <div>
-                      <p className="font-semibold">Próxima muestra disponible en {getMinutesUntilNextSample()} minutos</p>
-                      <p className="text-xs opacity-80">Tomar foto: hora {getNextEnabledSample()}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
               <CardContent className="space-y-2 pt-2 p-2 sm:p-3">
                 {/* Sección Unidades */}
                 <div className="space-y-1">
@@ -1656,7 +1647,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       }
                     }}
                     placeholder="0-20"
-                    disabled={editedTest.isCompleted || !isSampleEnabled(sample.timeSlot)}
+                    disabled={editedTest.isCompleted}
                     className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
@@ -1716,7 +1707,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                       }
                     }}
                     placeholder="0-20"
-                    disabled={editedTest.isCompleted || !isSampleEnabled(sample.timeSlot)}
+                    disabled={editedTest.isCompleted}
                     className="h-8 sm:h-10 text-xs sm:text-sm font-semibold bg-white text-gray-900 border-2 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg shadow-sm transition-all placeholder:text-gray-400"
                   />
                 </div>
@@ -1760,7 +1751,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <Button 
                       className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-camera-${sample.id}`)?.click()}
-                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id) || !isSampleEnabled(sample.timeSlot)}
+                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
                     >
                       {uploadingPhotos.has(sample.id) ? (
                         <>
@@ -1781,7 +1772,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     <Button 
                       className={`flex-1 gap-1.5 h-8 sm:h-9 text-xs sm:text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-sm border-0 transition-all ${uploadingPhotos.has(sample.id) ? 'opacity-50' : ''}`}
                       onClick={() => document.getElementById(`photo-gallery-${sample.id}`)?.click()}
-                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id) || !isSampleEnabled(sample.timeSlot)}
+                      disabled={editedTest.isCompleted || uploadingPhotos.has(sample.id)}
                     >
                       {uploadingPhotos.has(sample.id) ? (
                         <>
