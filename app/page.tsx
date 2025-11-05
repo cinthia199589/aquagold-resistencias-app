@@ -911,6 +911,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         console.log('🔄 Reemplazando foto anterior...');
       }
 
+      // Obtener el timeSlot de la muestra para nombrar la foto
+      const sample = editedTest.samples.find(s => s.id === sampleId);
+      const timeSlot = sample?.timeSlot ?? 0;
+
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
@@ -941,7 +945,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             ...prev,
             [sampleId]: progress
           }));
-        }
+        },
+        timeSlot // 🆕 Pasar el timeSlot para nombrar la foto
       );
 
       if (result.success && result.photoUrl) {

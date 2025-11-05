@@ -358,7 +358,8 @@ export const uploadPhotoReliably = async (
         lotNumber,
         sampleId,
         processedFile,
-        testType
+        testType,
+        timeSlot // 🆕 Pasar timeSlot para nombrar la foto
       );
 
       // FASE 5: Verificación final MÁS ROBUSTA

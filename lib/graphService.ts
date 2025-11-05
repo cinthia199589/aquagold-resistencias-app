@@ -358,7 +358,8 @@ export const uploadPhotoToOneDrive = async (
   lotNumber: string,
   sampleId: string,
   photoBlob: Blob,
-  testType: TestType
+  testType: TestType,
+  timeSlot?: number // 🆕 Hora de la muestra para nombrar la foto
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
   const folderName = getOneDriveFolderByType(testType);
@@ -367,7 +368,8 @@ export const uploadPhotoToOneDrive = async (
     // ✨ FASE 1 FIX: Asegurar que carpetas existen antes de subir
     await ensureLotFolderExists(msalInstance, scopes, folderName, lotNumber);
     
-    const fileName = `foto_${sampleId}.jpg`;
+    // 🆕 Nombrar foto según la hora de la muestra: "Hora 0.jpg", "Hora 2.jpg", etc.
+    const fileName = timeSlot !== undefined ? `Hora ${timeSlot}.jpg` : `foto_${sampleId}.jpg`;
     const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     console.log(`📤 Iniciando carga de foto: ${fileName}`);
