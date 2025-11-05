@@ -1193,6 +1193,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       
       alert('✅ Resistencia completada y reporte guardado en OneDrive');
       onTestUpdated();
+      
+      // Volver al dashboard después de 1 segundo
+      setTimeout(() => {
+        setRoute('dashboard');
+      }, 1000);
     } catch (error: any) {
       alert(`❌ Error: ${error.message}`);
     } finally {
