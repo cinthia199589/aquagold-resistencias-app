@@ -31,7 +31,6 @@ import { AutoSaveIndicator } from '../components/AutoSaveIndicator';
 import { SaveNotification } from '../components/SaveNotification';
 import { useAutoSave } from '../lib/useAutoSave';
 import { useOnlineStatus, OfflineBanner } from '../lib/offlineDetector';
-import { migratePhotoUrls } from '../lib/migratePhotoUrls';
 
 // ⚡ LAZY LOADING - Componentes cargados bajo demanda
 const DailyReportModal = dynamic(() => import('../components/DailyReportModal'), {
@@ -2517,14 +2516,6 @@ const DevModeWrapper = ({ children }: { children: React.ReactNode }) => {
 // App principal
 const App = () => {
   const { instance, loading, error } = useMsalInstance();
-
-  // Exponer función de migración globalmente para uso en consola
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).migratePhotoUrls = migratePhotoUrls;
-      console.log('🔧 Función migratePhotoUrls() disponible en consola');
-    }
-  }, []);
 
   // Registrar Service Worker para PWA
   useEffect(() => {
