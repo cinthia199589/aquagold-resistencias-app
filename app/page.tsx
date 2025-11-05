@@ -425,6 +425,36 @@ const ResistanceTestList = ({
                                 );
                               })}
                             </div>
+                            
+                            {/* Próxima foto pendiente */}
+                            {(() => {
+                              const nextPendingSample = test.samples.find(s => {
+                                const isComplete = s.photoUrl && s.photoUrl.trim() !== '' && 
+                                                  s.rawUnits !== undefined && s.rawUnits !== null &&
+                                                  s.cookedUnits !== undefined && s.cookedUnits !== null;
+                                return !isComplete;
+                              });
+                              
+                              if (nextPendingSample) {
+                                const [startHours, startMinutes] = test.startTime.split(':').map(Number);
+                                const [year, month, day] = test.date.split('-').map(Number);
+                                const startTime = new Date(year, month - 1, day, startHours, startMinutes, 0, 0);
+                                const sampleScheduleTime = new Date(startTime);
+                                sampleScheduleTime.setHours(sampleScheduleTime.getHours() + nextPendingSample.timeSlot);
+                                const now = new Date();
+                                const minutesRemaining = Math.max(0, Math.ceil((sampleScheduleTime.getTime() - now.getTime()) / 60000));
+                                
+                                return (
+                                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 rounded border border-blue-200 dark:border-blue-800">
+                                    <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
+                                      📸 Próxima foto: <strong>Hora {formatTimeSlot ? formatTimeSlot(test.startTime, nextPendingSample.timeSlot) : nextPendingSample.timeSlot}</strong>
+                                      {minutesRemaining > 0 ? ` en ${minutesRemaining} min` : ' (¡Ya!)'}
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
                       </div>
