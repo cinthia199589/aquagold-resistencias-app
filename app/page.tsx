@@ -492,9 +492,38 @@ const ResistanceTestList = ({
                               <h4 className="text-sm font-bold mb-2">📸 Galería de Fotos</h4>
                               <div className="grid grid-cols-4 gap-2">
                                 {selectedTest.samples.map(sample => (
-                                  <div key={sample.id} className="aspect-square rounded border-2 border-gray-300 overflow-hidden bg-gray-100">
+                                  <div key={sample.id} className="aspect-square rounded border-2 border-gray-300 overflow-hidden bg-gray-100 relative group flex items-center justify-center">
                                     {sample.photoUrl ? (
-                                      <img src={sample.photoUrl} alt={`Hora ${sample.timeSlot}`} className="w-full h-full object-cover" />
+                                      <>
+                                        <img 
+                                          src={sample.photoUrl} 
+                                          alt={`Hora ${sample.timeSlot}`} 
+                                          className="w-full h-full object-contain"
+                                          style={{ 
+                                            transform: `rotate(${sample.rotation || 0}deg) scale(${sample.rotation === 90 || sample.rotation === 270 ? 0.7 : 1})`,
+                                            transition: 'transform 0.3s ease-in-out'
+                                          }}
+                                        />
+                                        {/* Botón rotar - DENTRO, esquina superior izquierda */}
+                                        <button
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            const currentRotation = sample.rotation || 0;
+                                            const newRotation = (currentRotation + 90) % 360;
+                                            // Actualizar muestra con nueva rotación
+                                            sample.rotation = newRotation;
+                                            // Guardar en Firestore en segundo plano
+                                            saveTestToFirestore(selectedTest).catch(console.error);
+                                            // Forzar re-render actualizando el ID seleccionado
+                                            setSelectedTestId(null);
+                                            setTimeout(() => setSelectedTestId(selectedTest.id), 0);
+                                          }}
+                                          className="absolute top-1 left-1 bg-blue-600/90 hover:bg-blue-700 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-20 text-[10px]"
+                                          title="Rotar 90°"
+                                        >
+                                          🔄
+                                        </button>
+                                      </>
                                     ) : (
                                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
                                         <Camera size={16} />
@@ -962,7 +991,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     return () => clearInterval(timer);
   }, []);
 
-  const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits', value: number | undefined) => {
+  const handleSampleChange = async (sampleId: string, field: 'rawUnits' | 'cookedUnits' | 'rotation', value: number | undefined) => {
     // Actualizar estado local inmediatamente para feedback visual
     const updatedTest = {
       ...editedTest,
@@ -970,7 +999,19 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
     };
     setEditedTest(updatedTest);
 
-    // Usar servicio confiable para guardar
+    // Si es rotación, guardar directamente en Firestore (más simple y rápido)
+    if (field === 'rotation') {
+      try {
+        await saveTestToFirestore(updatedTest);
+        onTestUpdated();
+        console.log(`🔄 Rotación guardada: ${value}°`);
+      } catch (error) {
+        console.error('❌ Error al guardar rotación:', error);
+      }
+      return;
+    }
+
+    // Para unidades, usar servicio confiable
     try {
       const result = await saveUnitsReliably(
         updatedTest,
@@ -1877,12 +1918,18 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   
                   {sample.photoUrl && (
                     <div className="space-y-1 sm:space-y-2">
-                      {/* Vista previa de la imagen - TAMAÑO FIJO */}
-                      <div className="relative group w-full h-32 sm:h-40 bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200">
+                      {/* Vista previa de la imagen - ALTURA DINÁMICA según rotación */}
+                      <div className={`relative group w-full bg-gray-100 rounded-lg overflow-hidden border-2 border-gray-200 flex items-center justify-center ${
+                        sample.rotation === 90 || sample.rotation === 270 ? 'h-48 sm:h-60' : 'h-32 sm:h-40'
+                      }`}>
                         <img
                           src={sample.photoUrl}
                           alt={`Foto muestra ${formatTimeSlot(test.startTime, sample.timeSlot)}`}
-                          className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                          className="w-full h-full object-contain"
+                          style={{ 
+                            transform: `rotate(${sample.rotation || 0}deg)`,
+                            transition: 'transform 0.3s ease-in-out'
+                          }}
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
@@ -1890,18 +1937,27 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                           }}
                         />
                         {/* Badge de completado */}
-                        <div className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-md">
+                        <div className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-md z-20">
                           ✓
                         </div>
+                        {/* 🔄 Botón de rotación - DENTRO de la foto, esquina superior izquierda */}
+                        <button
+                          onClick={() => {
+                            const currentRotation = sample.rotation || 0;
+                            const newRotation = (currentRotation + 90) % 360;
+                            handleSampleChange(sample.id, 'rotation', newRotation);
+                          }}
+                          className="absolute top-2 left-2 bg-blue-600/90 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-10"
+                          title="Rotar foto 90°"
+                        >
+                          🔄
+                        </button>
                         {/* Fallback si la imagen no carga */}
                         <div className="hidden absolute inset-0 flex items-center justify-center bg-gray-200">
                           <div className="text-center text-gray-500">
                             <Camera size={24} />
                             <p className="text-xs mt-1">Imagen no disponible</p>
                           </div>
-                        </div>
-                        {/* Overlay con botones */}
-                        <div className="absolute top-2 right-2 flex gap-1">
                         </div>
                       </div>
 
@@ -1974,25 +2030,42 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
               .sort((a, b) => a.timeSlot - b.timeSlot)
               .map(sample => (
                 <div key={sample.id} className="group relative">
-                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 hover:border-blue-500 dark:hover:border-blue-400 transition-all hover:shadow-xl">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 hover:border-blue-500 dark:hover:border-blue-400 transition-all hover:shadow-xl relative flex items-center justify-center">
                     {sample.photoUrl ? (
                       <>
                         <img 
                           src={sample.photoUrl} 
                           alt={`Hora ${sample.timeSlot}`}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          className="w-full h-full object-contain transition-all duration-300"
+                          style={{ 
+                            transform: `rotate(${sample.rotation || 0}deg) scale(${sample.rotation === 90 || sample.rotation === 270 ? 0.7 : 1})`,
+                            transition: 'transform 0.3s ease-in-out'
+                          }}
                         />
-                        {/* Overlay con info */}
+                        {/* 🔄 Botón de rotación - SIEMPRE VISIBLE, esquina superior izquierda */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const currentRotation = sample.rotation || 0;
+                            const newRotation = (currentRotation + 90) % 360;
+                            handleSampleChange(sample.id, 'rotation', newRotation);
+                          }}
+                          className="absolute top-2 left-2 bg-blue-600/90 hover:bg-blue-700 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all hover:scale-110 z-30"
+                          title="Rotar foto 90°"
+                        >
+                          🔄
+                        </button>
+                        {/* Overlay con info - NO CUBRE EL BOTÓN */}
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-3">
-                          <div className="text-2xl font-bold mb-2">🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}</div>
-                          <div className="text-sm space-y-1 text-center">
+                          <div className="text-2xl font-bold mb-2 pointer-events-none">🕐 {formatTimeSlot(test.startTime, sample.timeSlot)}</div>
+                          <div className="text-sm space-y-1 text-center pointer-events-none">
                             <div>Crudo: <strong>{sample.rawUnits ?? 'N/A'}</strong></div>
                             <div>Cocido: <strong>{sample.cookedUnits ?? 'N/A'}</strong></div>
                           </div>
                           <a
                             href={sample.photoUrl}
                             download={`${test.lotNumber}-Hora-${sample.timeSlot}.jpg`}
-                            className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-medium transition-colors"
+                            className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-medium transition-colors pointer-events-auto z-20"
                             onClick={(e) => e.stopPropagation()}
                           >
                             ⬇️ Descargar

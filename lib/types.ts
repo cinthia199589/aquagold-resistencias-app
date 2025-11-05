@@ -45,6 +45,7 @@ export interface Sample {
   rawUnits?: number; // Ahora opcional para distinguir entre "no completado" y "realmente 0"
   cookedUnits?: number; // Ahora opcional para distinguir entre "no completado" y "realmente 0"
   photoUrl?: string;
+  rotation?: number; // 🆕 Rotación de la foto: 0, 90, 180, 270 grados
 }
 
 export interface ResistanceTest {
