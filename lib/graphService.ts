@@ -196,7 +196,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: "database",
           folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
+          "@microsoft.graph.conflictBehavior": "fail"
         })
       );
     }
@@ -212,7 +212,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: "tests",
           folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
+          "@microsoft.graph.conflictBehavior": "fail"
         })
       );
     }
@@ -228,7 +228,7 @@ export const saveTestBackupJSON = async (
         JSON.stringify({
           name: month,
           folder: {},
-          "@microsoft.graph.conflictBehavior": "rename"
+          "@microsoft.graph.conflictBehavior": "fail"
         })
       );
     }
@@ -364,7 +364,8 @@ export const uploadPhotoToOneDrive = async (
   lotNumber: string,
   sampleId: string,
   photoBlob: Blob,
-  testType: TestType
+  testType: TestType,
+  timeSlot?: number // 🆕 NUEVO: Hora para nombrar foto (0, 2, 4, 6, 8, 10, 12)
 ): Promise<string> => {
   const callApi = await getGraphClient(msalInstance, scopes);
   const folderName = getOneDriveFolderByType(testType);
@@ -373,7 +374,8 @@ export const uploadPhotoToOneDrive = async (
     // ✨ FASE 1 FIX: Asegurar que carpetas existen antes de subir
     await ensureLotFolderExists(msalInstance, scopes, folderName, lotNumber);
     
-    const fileName = `foto_${sampleId}.jpg`;
+    // 🆕 Usar nombre basado en hora si está disponible, sino usar sampleId
+    const fileName = timeSlot !== undefined ? `hora_${timeSlot}.jpg` : `foto_${sampleId}.jpg`;
     const uploadEndpoint = `/me/drive/root:/${folderName}/${lotNumber}/${fileName}:/content`;
     
     console.log(`📤 Iniciando carga de foto: ${fileName}`);

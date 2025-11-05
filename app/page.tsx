@@ -803,6 +803,18 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         await saveTestToFirestore(updatedTest);
       }
 
+      // 🆕 IMPORTANTE: Actualizar JSON en OneDrive para eliminar la muestra
+      try {
+        const { saveTestBackupJSON } = await import('../lib/graphService');
+        if (instance) {
+          await saveTestBackupJSON(instance, loginRequest.scopes, updatedTest);
+          console.log('✅ JSON de respaldo actualizado después de eliminar muestra');
+        }
+      } catch (jsonError) {
+        console.warn('⚠️ No se pudo actualizar JSON de respaldo:', jsonError);
+        // No bloquear el flujo si falla el JSON
+      }
+
       // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
 
@@ -843,6 +855,10 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         console.log('🔄 Reemplazando foto anterior...');
       }
 
+      // Obtener timeSlot del sample para nombrar foto
+      const sample = editedTest.samples.find(s => s.id === sampleId);
+      const timeSlot = sample?.timeSlot;
+
       // Crear vista previa temporal mientras sube
       const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
@@ -873,7 +889,8 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
             ...prev,
             [sampleId]: progress
           }));
-        }
+        },
+        timeSlot // 🆕 Pasar timeSlot para nombrar archivo hora_0, hora_2, etc.
       );
 
       if (result.success && result.photoUrl) {

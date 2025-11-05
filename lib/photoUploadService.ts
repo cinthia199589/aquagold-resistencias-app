@@ -267,7 +267,8 @@ export const uploadPhotoReliably = async (
   file: File,
   testType: TestType,
   options: PhotoUploadOptions = {},
-  onProgress?: (progress: UploadProgress) => void
+  onProgress?: (progress: UploadProgress) => void,
+  timeSlot?: number // 🆕 NUEVO: Hora para nombrar foto
 ): Promise<PhotoUploadResult> => {
 
   const {
@@ -357,7 +358,8 @@ export const uploadPhotoReliably = async (
         lotNumber,
         sampleId,
         processedFile,
-        testType
+        testType,
+        timeSlot // 🆕 Pasar timeSlot para nombrar foto
       );
 
       // FASE 5: Verificación final MÁS ROBUSTA
