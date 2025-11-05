@@ -1367,9 +1367,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                   {isSaving ? 'Guardando...' : 'Guardar'}
                 </Button>
                 <div title={(() => {
-                    const samplesWithoutPhoto = editedTest.samples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
-                    const samplesWithoutRawUnits = editedTest.samples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
-                    const samplesWithoutCookedUnits = editedTest.samples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
+                    // Solo verificar muestras habilitadas
+                    const enabledSamples = editedTest.samples.filter(sample => isSampleEnabled(sample.timeSlot));
+                    const samplesWithoutPhoto = enabledSamples.filter(sample => !sample.photoUrl || sample.photoUrl.trim() === '');
+                    const samplesWithoutRawUnits = enabledSamples.filter(sample => sample.rawUnits === undefined || sample.rawUnits === null);
+                    const samplesWithoutCookedUnits = enabledSamples.filter(sample => sample.cookedUnits === undefined || sample.cookedUnits === null);
                     
                     const missingItems = [];
                     if (samplesWithoutPhoto.length > 0) missingItems.push('fotos');
@@ -1384,14 +1386,17 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
                     className="h-11 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed" 
                     onClick={handleComplete} 
                     disabled={isCompleting || 
-                      editedTest.samples.some(sample => 
-                        !sample.photoUrl || 
-                        sample.photoUrl.trim() === '' ||
-                        sample.rawUnits === undefined || 
-                        sample.rawUnits === null ||
-                        sample.cookedUnits === undefined || 
-                        sample.cookedUnits === null
-                      )}
+                      editedTest.samples
+                        .filter(sample => isSampleEnabled(sample.timeSlot))
+                        .some(sample => 
+                          !sample.photoUrl || 
+                          sample.photoUrl.trim() === '' ||
+                          sample.rawUnits === undefined || 
+                          sample.rawUnits === null ||
+                          sample.cookedUnits === undefined || 
+                          sample.cookedUnits === null
+                        )
+                    }
                   >
                     <CheckCircle size={16} className="mr-2"/>
                     {isCompleting ? 'Completando...' : 'Completar'}
