@@ -367,36 +367,46 @@ export const uploadPhotoReliably = async (
         message: 'Verificando subida...'
       });
 
-      // 🆕 VERIFICACIÓN SIMPLIFICADA: Solo verificar que tenemos una URL válida
-      // La verificación por fetch puede fallar por CORS pero la foto está subida
+      // 🆕 VERIFICACIÓN CRÍTICA: Confirmar que la URL es accesible
+      let verificationAttempts = 0;
+      const maxVerificationAttempts = 3;
       let urlVerified = false;
-      
-      if (photoUrl && photoUrl.startsWith('https://')) {
-        // La URL existe y tiene formato correcto
-        urlVerified = true;
-        console.log(`✅ URL de OneDrive recibida correctamente`);
-        
-        // Opcional: Intentar verificar (pero no fallar si no funciona)
+
+      while (verificationAttempts < maxVerificationAttempts && !urlVerified) {
         try {
+          // Esperar un poco antes de verificar (dar tiempo a OneDrive)
+          if (verificationAttempts > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          
-          // Usar GET en vez de HEAD para evitar problemas de CORS
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
           const response = await fetch(photoUrl, { 
-            method: 'GET',
+            method: 'HEAD',
             signal: controller.signal,
-            cache: 'no-cache',
-            mode: 'no-cors' // Evitar errores de CORS
+            cache: 'no-cache'
           });
-          
+
           clearTimeout(timeoutId);
-          console.log(`✅ Verificación de URL completada`);
+
+          if (response.ok || response.status === 302 || response.status === 200) {
+            urlVerified = true;
+            console.log(`✅ URL verificada como accesible (intento ${verificationAttempts + 1})`);
+          } else {
+            throw new Error(`URL retornó estado: ${response.status}`);
+          }
         } catch (verifyError: any) {
-          // La verificación falló pero la URL existe, así que está bien
-          console.warn(`⚠️ No se pudo verificar URL por CORS/timeout, pero la foto está subida:`, verifyError.message);
+          verificationAttempts++;
+          console.warn(`⚠️ Intento ${verificationAttempts} de verificación falló:`, verifyError.message);
+          
+          if (verificationAttempts >= maxVerificationAttempts) {
+            // Último intento falló - registrar pero NO fallar la subida
+            console.error(`❌ No se pudo verificar URL después de ${maxVerificationAttempts} intentos`);
+            console.error(`⚠️ ADVERTENCIA: La foto puede no ser accesible. URL: ${photoUrl}`);
+            // No lanzar error aquí para no perder la subida, pero registrar el problema
+          }
         }
-      } else {
-        console.error(`❌ URL inválida recibida de OneDrive: ${photoUrl}`);
       }
 
       onProgress?.({

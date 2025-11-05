@@ -662,18 +662,19 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
   const { status: autoSaveStatus, markAsSaved } = useAutoSave({
     data: {
       ...editedTest,
-      // Excluir unidades del auto-guardado (se guardan manualmente con sistema confiable)
-      // MANTENER photoUrl en el auto-guardado (crítico para no perder fotos)
+      // ✅ CRÍTICO: MANTENER rawUnits y cookedUnits para que no se borren
+      // Solo excluirlas del monitoreo de cambios, pero SIEMPRE guardarlas
       samples: editedTest.samples.map(s => ({
         id: s.id,
         timeSlot: s.timeSlot,
-        photoUrl: s.photoUrl, // ✅ MANTENER photoUrl
-        rawUnits: undefined, // Excluido del auto-guardado
-        cookedUnits: undefined // Excluido del auto-guardado
+        photoUrl: s.photoUrl,
+        // ✅ MANTENER las unidades (crítico)
+        rawUnits: s.rawUnits,
+        cookedUnits: s.cookedUnits
       }))
     },
     onSave: async () => {
-      // ⚠️ CRÍTICO: Guardar el editedTest COMPLETO, no la versión modificada
+      // ⚠️ CRÍTICO: Guardar el editedTest COMPLETO con todas las unidades
       if (saveTestFn) {
         await saveTestFn(editedTest);
       } else {
@@ -681,8 +682,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       }
       // ❌ NO recargar todos los tests después de cada auto-guardado
       // onTestUpdated(); 
+      console.log('💾 Auto-guardado completado (con unidades)');
     },
-    delay: 2000, // 2 segundos de delay para evitar guardados excesivos
+    delay: 2000, // 2 segundos para evitar guardados excesivos
     enabled: !test.isCompleted // Solo si NO está completada
   });
 
@@ -737,11 +739,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       );
 
       if (result.success) {
-        // ✅ NO recargar todos los tests, solo actualizar estado local
+        // ✅ NO recargar todos los tests, el estado local ya está actualizado
         console.log(`✅ Unidad ${field} guardada exitosamente para muestra ${sampleId}`);
       } else {
         console.error('❌ Error al guardar unidad:', result.errors);
-        // Aquí podríamos mostrar una notificación de error al usuario
+        alert(`⚠️ Error al guardar: ${result.errors?.join(', ')}`);
       }
     } catch (error) {
       console.error('❌ Error crítico al guardar unidad:', error);
@@ -787,8 +789,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
 
-      // ✅ NO recargar todos los tests, el estado local ya está actualizado
-      console.log('🗑️ Muestra eliminada y guardada');
+      onTestUpdated();
     }
     
     setDeleteConfirm({ isOpen: false, sampleId: null, itemName: '' });
@@ -825,11 +826,11 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         console.log('🔄 Reemplazando foto anterior...');
       }
 
-      // ✅ NO usar blob URL temporal para evitar errores en producción
-      // Solo marcar como "subiendo" sin cambiar photoUrl
+      // Crear vista previa temporal mientras sube
+      const tempUrl = URL.createObjectURL(file);
       setEditedTest(prev => ({
         ...prev,
-        samples: prev.samples.map(s => s.id === sampleId ? { ...s, isUploading: true } : s)
+        samples: prev.samples.map(s => s.id === sampleId ? { ...s, photoUrl: tempUrl, isUploading: true } : s)
       }));
 
       // 🆕 Usar el nuevo servicio confiable de subida de fotos
@@ -892,11 +893,6 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
           } else {
             await saveTestToFirestore(updatedTest);
           }
-          
-          // ✅ Marcar como guardado para evitar que auto-save sobrescriba
-          markAsSaved(false);
-          
-          console.log(`💾 Test guardado con nueva foto para muestra ${sampleId}`);
         } catch (saveError: any) {
           // No mostrar error al usuario para no interrumpir el flujo
           console.warn('⚠️ Error guardando después de subida exitosa:', saveError);
@@ -920,6 +916,9 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
         // La subida falló después de todos los reintentos
         throw new Error(result.error || 'Error desconocido en la subida');
       }
+
+      // Limpiar URL temporal
+      URL.revokeObjectURL(tempUrl);
 
     } catch (error: any) {
       console.error('❌ Error en subida de foto:', error);
@@ -972,8 +971,7 @@ const TestDetailPage = ({ test, setRoute, onTestUpdated, saveTestFn }: { test: R
       // Marcar como guardado para evitar conflictos con auto-guardado
       markAsSaved(false);
 
-      // ✅ NO recargar todos los tests innecesariamente
-      console.log('💾 Guardado manual exitoso');
+      onTestUpdated();
     } catch (error: any) {
       // Solo mostrar alert en caso de ERROR
       alert(`❌ Error al guardar: ${error.message}`);
